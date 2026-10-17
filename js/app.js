@@ -1,0 +1,1358 @@
+/* 포켓몬 사다리 대모험 — 화면·연출
+ * 규칙은 rules.js, 문제는 quiz-math.js / quiz-en.js / learn.js, 읽어 줄 말은 voice-lines.js.
+ * 여기서는 판을 그리고, 규칙 엔진이 묻는 것(io)을 화면으로 보여 주고 답을 받는다.
+ */
+"use strict";
+
+const R = window.Rules;
+const L = window.VoiceLines.L;
+const $ = (s, el) => (el || document).querySelector(s);
+const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const QS = new URLSearchParams(location.search);
+const TEST = QS.has("test");
+const TRAINER = Object.fromEntries(R.TRAINERS.map((t) => [t.id, t]));
+const ABORT = new Error("abort");
+
+// ---------- 저장 ----------
+const Store = {
+  KEY: "pokeladder_v1",
+  data: null,
+  load() {
+    try { this.data = JSON.parse(localStorage.getItem(this.KEY) || "null"); } catch (e) { this.data = null; }
+    this.data = Object.assign({ settings: { sound: true, voice: true, fast: false }, setup: null, game: null, learn: {}, history: [] }, this.data || {});
+    if (QS.has("reset")) this.data.game = null;
+  },
+  save() { try { localStorage.setItem(this.KEY, JSON.stringify(this.data)); } catch (e) { /* 저장 공간 없음 */ } },
+};
+Store.load();
+
+// ---------- 속도 ----------
+const Speed = {
+  get k() { return TEST ? 0.02 : Store.data.settings.fast ? 0.55 : 1; },
+};
+const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms * Speed.k)));
+
+// ---------- 효과음 (WebAudio 칩튠) ----------
+const SFX = {
+  ctx: null,
+  ensure() {
+    if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+    if (this.ctx.state === "suspended") this.ctx.resume();
+    return this.ctx;
+  },
+  tone(seq, type) {
+    if (!Store.data.settings.sound || TEST) return;
+    const c = this.ensure();
+    if (!c) return;
+    let t = c.currentTime;
+    for (const [f, d, v] of seq) {
+      if (f) {
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = type || "square";
+        o.frequency.value = f;
+        g.gain.setValueAtTime((v || 0.06), t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + d);
+        o.connect(g); g.connect(c.destination);
+        o.start(t); o.stop(t + d);
+      }
+      t += d;
+    }
+  },
+  step() { this.tone([[660, 0.05, 0.04]]); },
+  dice() { this.tone([[300, 0.04], [500, 0.04], [400, 0.04], [700, 0.06]]); },
+  up() { this.tone([[523, 0.08], [659, 0.08], [784, 0.08], [1047, 0.16]]); },
+  down() { this.tone([[880, 0.08], [740, 0.08], [587, 0.08], [440, 0.08], [330, 0.18]], "triangle"); },
+  good() { this.tone([[784, 0.09], [1047, 0.2]]); },
+  bad() { this.tone([[300, 0.12], [220, 0.22]], "sawtooth"); },
+  card() { this.tone([[880, 0.05], [1175, 0.05], [1568, 0.12]], "triangle"); },
+  alarm() { this.tone([[880, 0.12], [660, 0.12], [880, 0.12], [660, 0.12]], "sawtooth"); },
+  win() { this.tone([[523, 0.12], [659, 0.12], [784, 0.12], [1047, 0.12], [784, 0.1], [1047, 0.35]]); },
+  pop() { this.tone([[1200, 0.04], [1600, 0.05]], "triangle"); },
+};
+
+// ---------- 목소리 (Edge TTS 미리 녹음, 없으면 기기 목소리) ----------
+const Voice = {
+  el: null,
+  queue: Promise.resolve(),
+  token: 0,
+  key(s) {
+    return String(s).replace(/[\u{1F000}-\u{1FAFF}☀-➿️‍]/gu, "").trim().normalize("NFD").replace(/[̀-ͯ]/g, "").normalize("NFC")
+      .toLowerCase().replace(/[’‘`]/g, "'").replace(/[^a-z0-9'가-힣]+/g, " ").trim();
+  },
+  unlock() {
+    if (this.el) return;
+    this.el = new Audio();
+    this.el.preload = "auto";
+    // iOS 사파리: 첫 터치 안에서 한 번 재생해 둬야 나중에 녹음이 나온다 (무음 wav)
+    this.el.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+    const p = this.el.play();
+    if (p && p.catch) p.catch(() => {});
+    SFX.ensure();
+  },
+  stop() {
+    this.token++;
+    if (this.el) { try { this.el.pause(); } catch (e) { /* */ } }
+    if (window.speechSynthesis) speechSynthesis.cancel();
+  },
+  playOne(text, lang, my) {
+    return new Promise((resolve) => {
+      if (my !== this.token) return resolve();
+      const file = window.VOICE && window.VOICE[this.key(text)];
+      const done = () => resolve();
+      if (file && this.el) {
+        this.el.onended = done;
+        this.el.onerror = done;
+        this.el.src = "assets/voice/" + file;
+        const p = this.el.play();
+        if (p && p.catch) p.catch(done);
+        setTimeout(done, 9000);
+      } else if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = lang;
+        u.rate = lang === "en-US" ? 0.85 : 1;
+        u.onend = done; u.onerror = done;
+        speechSynthesis.speak(u);
+        setTimeout(done, 6000);
+      } else resolve();
+    });
+  },
+  /** 조각을 이어 읽는다. 새 말이 오면 하던 말은 끊는다. */
+  speak(pieces, lang) {
+    if (!Store.data.settings.voice || TEST) return Promise.resolve();
+    this.stop();
+    const my = this.token;
+    const list = pieces.filter((x) => x != null && String(x).trim());
+    const run = async () => { for (const p of list) { if (my !== this.token) return; await this.playOne(String(p), lang, my); } };
+    return run();
+  },
+};
+const say = (...pieces) => Voice.speak(pieces, "ko-KR");
+const sayEn = (text) => Voice.speak([text], "en-US");
+document.addEventListener("pointerdown", () => Voice.unlock(), { once: true });
+
+// ---------- 그림 ----------
+const IMG = {
+  trainer: (id) => `assets/trainers/${id}.png`,
+  poke: (n) => `assets/sprites/${n}.png`,
+  pokeAnim: (n) => `assets/sprites/${n}.gif`,
+  region: (r) => `assets/board/region-${r}.webp`,
+  tile: (k) => `assets/icons/tile-${k}.png`,
+  frame: (cat) => `assets/cards/frame-${cat}.webp`,
+  cardIcon: (id) => { const c = R.CARDS[id]; return c.cat === "ability" ? IMG.poke(c.poke) : `assets/icons/${c.cat}-${c.icon}.png`; },
+};
+const CAT_NAME = { ability: "능력 카드", rocket: "로켓단 카드", event: "이벤트 카드" };
+
+function cardHTML(id, extra) {
+  const c = R.CARDS[id];
+  return `<div class="card cat-${c.cat} ${extra || ""}" data-card="${id}">
+    <img class="frame" src="${IMG.frame(c.cat)}" alt="">
+    <div class="art"><img src="${IMG.cardIcon(id)}" alt=""></div>
+    <div class="cname">${esc(c.name)}</div>
+    <div class="ctext">${esc(c.text)}</div>
+    ${c.who ? `<div class="cwho">${esc(c.who)}</div>` : `<div class="cwho">${CAT_NAME[c.cat]}</div>`}
+  </div>`;
+}
+function trainerHTML(p, cls) {
+  const t = TRAINER[p.trainer];
+  return `<span class="tr ${cls || ""}"><img class="tr-img" src="${IMG.trainer(t.id)}" alt=""><img class="tr-poke" src="${IMG.poke(t.partner)}" alt=""></span>`;
+}
+function rocketHTML() {
+  return `<span class="rk"><img src="assets/ui/rocket-jessie.png" alt=""><img src="assets/ui/rocket-james.png" alt=""><img class="rk-cat" src="assets/ui/rocket-meowth.png" alt=""></span>`;
+}
+
+// ---------- 화면 바꾸기 ----------
+function show(html, cls) {
+  closeLayers();
+  const app = $("#app");
+  app.className = cls || "";
+  app.innerHTML = html;
+  return app;
+}
+function layer(cls, html) {
+  const d = document.createElement("div");
+  d.className = "layer " + cls;
+  d.innerHTML = html;
+  document.body.appendChild(d);
+  return d;
+}
+function closeLayers(keep) { $$(".layer").forEach((d) => { if (!keep || !d.matches(keep)) d.remove(); }); }
+/** 요소 안의 [data-v] 버튼 중 하나를 누를 때까지 기다린다 */
+function waitPick(root, sel) {
+  return new Promise((resolve, reject) => {
+    G.reject = reject;
+    root.addEventListener("click", function h(e) {
+      const b = e.target.closest(sel || "[data-v]");
+      if (!b || !root.contains(b) || b.disabled) return;
+      root.removeEventListener("click", h);
+      SFX.pop();
+      G.reject = null;
+      resolve(b.dataset.v);
+    });
+  });
+}
+function toast(msg, ms) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.remove("hidden");
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => t.classList.add("hidden"), ms || 1800);
+}
+
+// =====================================================================
+// 처음 화면
+// =====================================================================
+function renderTitle() {
+  G.stop();
+  const g = Store.data.game;
+  show(`
+  <div class="title-screen">
+    <div class="title-sky">
+      <h1 class="logo"><span>포켓몬</span><b>사다리 대모험</b></h1>
+      <div class="title-cast">${R.TRAINERS.map((t) => `<img src="${IMG.trainer(t.id)}" alt="${esc(t.name)}">`).join("")}</div>
+    </div>
+    <div class="title-menu win-box">
+      ${g && g.winner == null ? `<button class="btn big primary" data-act="resume">▶ 이어하기 <small>${g.mode}칸 · ${g.round}라운드</small></button>` : ""}
+      <button class="btn big ${g && g.winner == null ? "" : "primary"}" data-act="new">🎲 새 모험</button>
+      <div class="row">
+        <button class="btn" data-act="help">📖 방법</button>
+        <button class="btn" data-act="parent">🔒 부모</button>
+        <button class="btn" data-act="sound">${Store.data.settings.voice ? "🔊 목소리" : "🔇 목소리"}</button>
+      </div>
+    </div>
+    <footer class="ver">v${APP_VERSION}<span id="updFoot"></span></footer>
+    ${Update.ver ? `<button class="btn upd" data-act="update">🎁 새 버전으로 바꾸기</button>` : ""}
+  </div>`, "screen-title");
+  $(".title-menu").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-act]");
+    if (!b) return;
+    SFX.pop();
+    const a = b.dataset.act;
+    if (a === "resume") resumeGame();
+    if (a === "new") renderSetup();
+    if (a === "help") showHelp();
+    if (a === "parent") parentGate();
+    if (a === "sound") { Store.data.settings.voice = !Store.data.settings.voice; Store.data.settings.sound = Store.data.settings.voice; Store.save(); renderTitle(); }
+  });
+  const u = $(".upd");
+  if (u) u.onclick = () => applyUpdate();
+  checkUpdate();
+}
+
+function showHelp() {
+  const d = layer("modal help", `<div class="win-box">
+    <h2>📖 이렇게 놀아요</h2>
+    <ol class="help-list">
+      <li>🎲 주사위를 굴려서 앞으로! 가장 먼저 <b>결승</b>에 닿으면 우승!</li>
+      <li><img src="${IMG.tile("ladder")}" alt="" onerror="this.remove()">🪜 <b>사다리</b> 칸에 멈추면 위로, 🛝 <b>미끄럼틀</b> 칸에 멈추면 아래로.</li>
+      <li><img src="${IMG.tile("quiz")}" alt=""> <b>퀴즈 칸</b>: 수학·영어 문제! 바로 맞히면 카드 또는 3칸.</li>
+      <li><img src="${IMG.tile("card")}" alt=""> <b>카드 칸</b>: 카드를 뽑아요. 능력 카드는 내 차례에 1장 쓸 수 있어요.</li>
+      <li><img src="${IMG.tile("rocket")}" alt=""> <b>로켓단 칸</b>: 로켓단에게 무슨 일이?!</li>
+      <li>👿 모두 한 번씩 하면 <b>로켓단 차례</b>. 같은 칸에 멈추면 잡혀요 → 문제를 맞히면 탈출!</li>
+      <li>⭐ 세 번째 차례마다 보너스 퀴즈!</li>
+    </ol>
+    <button class="btn big primary" data-v="ok">알겠어요!</button>
+  </div>`);
+  waitPick(d).then(() => d.remove()).catch(() => {});
+}
+
+// =====================================================================
+// 시작 설정 (모드 · 인원 · 트레이너 · 이름 · 난이도)
+// =====================================================================
+const DEFAULT_SETUP = {
+  mode: 100,
+  players: [
+    { name: "지온이", trainer: "ash", adult: false, math: 3, en: 2 },
+    { name: "엄마", trainer: "misty", adult: true, math: 4, en: 4 },
+  ],
+};
+function renderSetup() {
+  const st = JSON.parse(JSON.stringify(Store.data.setup || DEFAULT_SETUP));
+  const draw = () => {
+    const taken = st.players.map((p) => p.trainer);
+    show(`
+    <div class="setup">
+      <header class="bar"><button class="btn" data-a="back">◀ 처음</button><h2>새 모험 준비</h2><span></span></header>
+      <section class="win-box modes">
+        <button class="mode ${st.mode === 100 ? "on" : ""}" data-a="mode" data-v="100"><b>100칸</b><small>주사위 1개 · 짧은 모험</small></button>
+        <button class="mode ${st.mode === 200 ? "on" : ""}" data-a="mode" data-v="200"><b>200칸</b><small>주사위 2개 · 긴 모험</small></button>
+      </section>
+      <section class="players">
+        ${st.players.map((p, i) => `
+        <div class="win-box pl" style="--pc:${TRAINER[p.trainer].color}">
+          <div class="pl-head">
+            <span class="pl-num">${i + 1}P</span>
+            <button class="pl-name" data-a="name" data-i="${i}">${esc(p.name)} ✏️</button>
+            ${st.players.length > 2 ? `<button class="btn x" data-a="del" data-i="${i}" aria-label="빼기">✕</button>` : ""}
+          </div>
+          <div class="pl-trainers">
+            ${R.TRAINERS.map((t) => `<button class="tpick ${p.trainer === t.id ? "on" : ""}" data-a="tr" data-i="${i}" data-v="${t.id}" ${taken.includes(t.id) && p.trainer !== t.id ? "disabled" : ""}>
+              <img src="${IMG.trainer(t.id)}" alt=""><img class="tp-poke" src="${IMG.poke(t.partner)}" alt=""><span>${esc(t.name)}</span></button>`).join("")}
+          </div>
+          <div class="pl-levels">
+            <button class="chip ${p.adult ? "" : "on"}" data-a="adult" data-i="${i}" data-v="0">🧒 아이</button>
+            <button class="chip ${p.adult ? "on" : ""}" data-a="adult" data-i="${i}" data-v="1">🧑 어른</button>
+            <span class="lv">수학 <button class="step" data-a="lv" data-k="math" data-i="${i}" data-v="-1">−</button><b>LV.${p.math}</b><button class="step" data-a="lv" data-k="math" data-i="${i}" data-v="1">+</button></span>
+            <span class="lv">영어 <button class="step" data-a="lv" data-k="en" data-i="${i}" data-v="-1">−</button><b>LV.${p.en}</b><button class="step" data-a="lv" data-k="en" data-i="${i}" data-v="1">+</button></span>
+          </div>
+        </div>`).join("")}
+        ${st.players.length < 4 ? `<button class="win-box add" data-a="add">➕ 한 명 더</button>` : ""}
+      </section>
+      <footer class="setup-go"><button class="btn big primary" data-a="go">🚀 모험 출발!</button></footer>
+    </div>`, "screen-setup");
+  };
+  draw();
+  $("#app").onclick = async (e) => {
+    const b = e.target.closest("[data-a]");
+    if (!b || b.disabled) return;
+    SFX.pop();
+    const a = b.dataset.a, i = +b.dataset.i;
+    if (a === "back") return renderTitle();
+    if (a === "mode") st.mode = +b.dataset.v;
+    if (a === "tr") st.players[i].trainer = b.dataset.v;
+    if (a === "adult") {
+      const ad = b.dataset.v === "1";
+      st.players[i].adult = ad;
+      st.players[i].math = ad ? 4 : 3;
+      st.players[i].en = ad ? 4 : 2;
+    }
+    if (a === "lv") {
+      const k = b.dataset.k, lo = k === "math" ? 2 : 1;
+      st.players[i][k] = Math.max(lo, Math.min(4, st.players[i][k] + +b.dataset.v));
+    }
+    if (a === "del") st.players.splice(i, 1);
+    if (a === "add") {
+      const free = R.TRAINERS.find((t) => !st.players.some((p) => p.trainer === t.id));
+      const used = st.players.map((p) => p.name);
+      const nm = window.VoiceLines.NAMES.find((n) => !used.includes(n)) || "친구";
+      st.players.push({ name: nm, trainer: free.id, adult: true, math: 4, en: 4 });
+    }
+    if (a === "name") {
+      const nm = await askName(st.players[i].name, st.players.filter((_, k) => k !== i).map((p) => p.name));
+      if (nm) st.players[i].name = nm;
+    }
+    if (a === "go") {
+      Store.data.setup = st;
+      Store.save();
+      return startGame(st);
+    }
+    draw();
+  };
+}
+function askName(cur, others) {
+  return new Promise((resolve) => {
+    const d = layer("modal", `<div class="win-box name-box">
+      <h2>이름 정하기</h2>
+      <div class="chips">${window.VoiceLines.NAMES.map((n) => `<button class="chip" data-v="${esc(n)}" ${others.includes(n) ? "disabled" : ""}>${esc(n)}</button>`).join("")}</div>
+      <input id="nameIn" maxlength="8" value="${esc(cur)}" autocomplete="off">
+      <div class="row"><button class="btn" data-x="cancel">취소</button><button class="btn primary" data-x="ok">좋아요</button></div>
+    </div>`);
+    d.onclick = (e) => {
+      const c = e.target.closest("[data-v]");
+      if (c && !c.disabled) { $("#nameIn", d).value = c.dataset.v; return; }
+      const x = e.target.closest("[data-x]");
+      if (!x) return;
+      const v = $("#nameIn", d).value.trim().slice(0, 8);
+      d.remove();
+      resolve(x.dataset.x === "ok" && v && !others.includes(v) ? v : null);
+    };
+  });
+}
+
+// =====================================================================
+// 게임
+// =====================================================================
+const G = {
+  s: null, cell: 60, rows: 10, running: false, reject: null, current: 0, aborted: false, used: new Set(),
+  stop() {
+    this.aborted = true;
+    this.running = false;
+    if (this.reject) { const r = this.reject; this.reject = null; r(ABORT); }
+    Voice.stop();
+  },
+};
+
+function startGame(setup) {
+  const seed = QS.has("seed") ? +QS.get("seed") : (Date.now() ^ (Math.random() * 1e9)) >>> 0;
+  const s = R.createGame({ mode: setup.mode, seed, players: setup.players });
+  s.players.forEach((p) => { p.qs = { n: 0, first: 0, hint: 0, explained: 0, fail: 0, math: 0, en: 0 }; p.lastSubj = p.adult ? "en" : "math"; });
+  s.usedQ = [];
+  s.started = Date.now();
+  Store.data.game = s;
+  Store.save();
+  say(L.newGame);
+  runGame(s);
+}
+function resumeGame() {
+  const s = Store.data.game;
+  if (!s) return renderTitle();
+  runGame(s);
+}
+
+async function runGame(s) {
+  G.stop();
+  G.aborted = false;
+  G.s = s;
+  G.used = new Set(s.usedQ || []);
+  G.running = true;
+  renderBoardScreen();
+  try {
+    while (s.winner == null && !G.aborted) {
+      Store.data.game = s;
+      s.usedQ = [...G.used];
+      Store.save();
+      await R.step(s, IO);
+      renderPanel();
+    }
+  } catch (e) {
+    if (e !== ABORT) { console.error(e); toast("앗, 문제가 생겼어요: " + e.message, 5000); }
+    return;
+  }
+  if (G.aborted) return;
+  Store.data.game = s;
+  Store.save();
+  await finishGame(s);
+}
+
+// ---------- 판 화면 ----------
+function renderBoardScreen() {
+  const s = G.s;
+  const map = R.MAPS[s.mode];
+  G.rows = s.goal / 10;
+  show(`
+  <div class="game">
+    <div class="board-view" id="boardView"><div class="board" id="board"></div></div>
+    <aside class="panel" id="panel"></aside>
+    <div class="msg win-box" id="msg"><span id="msgText">${esc(L.title)}</span><i class="cursor">▶</i></div>
+  </div>`, "screen-game mode-" + s.mode);
+  layoutBoard();
+  drawBoard(map);
+  renderPanel();
+  focusCell(s.players[s.turn].pos, true);
+  window.onresize = () => { layoutBoard(); drawBoard(map); placeAll(true); };
+}
+function layoutBoard() {
+  const v = $("#boardView");
+  if (!v) return;
+  const W = v.clientWidth - 8, H = v.clientHeight - 8;
+  const vis = Math.min(G.rows, 10);
+  G.cell = Math.max(28, Math.floor(Math.min(W / 10, H / vis)));
+}
+function cellCenter(n) {
+  const { row, col } = R.cellXY(n);
+  const c = G.cell;
+  return { x: col * c + c / 2, y: (G.rows - 1 - row) * c + c / 2 };
+}
+function drawBoard(map) {
+  const b = $("#board");
+  const c = G.cell, s = G.s;
+  b.style.width = c * 10 + "px";
+  b.style.height = c * G.rows + "px";
+  b.style.setProperty("--cell", c + "px");
+  let h = "";
+  // 지역 바닥 (5줄 = 50칸씩, 아래부터)
+  map.regions.forEach((rg, i) => {
+    h += `<div class="region" style="bottom:${i * 5 * c}px;height:${5 * c}px;background-image:url(${IMG.region(rg)})"><span class="region-name">${esc(R.REGION_NAMES[rg])}</span></div>`;
+  });
+  for (let n = 1; n <= s.goal; n++) {
+    const p = cellCenter(n);
+    const t = R.cellType(map, n);
+    const icon = t && t !== "ladder" && t !== "slide" ? t : n === 1 ? "start" : n === s.goal ? "goal" : null;
+    h += `<div class="cell ${t ? "t-" + t : ""} ${n === 1 ? "t-start" : ""} ${n === s.goal ? "t-goal" : ""}" data-n="${n}" style="left:${p.x - c / 2}px;top:${p.y - c / 2}px">
+      <span class="num">${n}</span>${icon ? `<img class="ico" src="${IMG.tile(icon)}" alt="">` : ""}
+      ${t === "ladder" ? `<span class="mark up">▲${map.ladders[n]}</span>` : t === "slide" ? `<span class="mark down">▼${map.slides[n]}</span>` : ""}
+    </div>`;
+  }
+  // 사다리·미끄럼틀 (시작 칸 가운데 → 도착 칸 가운데)
+  const chute = (from, to, kind) => {
+    const a = cellCenter(from), z = cellCenter(to);
+    const dx = z.x - a.x, dy = z.y - a.y, len = Math.hypot(dx, dy);
+    const ang = Math.atan2(-dx, dy) * 180 / Math.PI;
+    const w = kind === "ladder" ? c * 0.42 : c * 0.36;
+    return `<div class="chute ${kind}" style="left:${a.x - w / 2}px;top:${a.y}px;width:${w}px;height:${len}px;transform:rotate(${ang}deg)"></div>`;
+  };
+  for (const k in map.ladders) h += chute(+k, map.ladders[k], "ladder");
+  for (const k in map.slides) h += chute(+k, map.slides[k], "slide");
+  s.players.forEach((p, i) => { h += `<div class="piece" id="pc${i}" style="--pc:${TRAINER[p.trainer].color}">${trainerHTML(p)}<span class="tag">${esc(p.name)}</span></div>`; });
+  h += `<div class="piece rocket" id="pcR">${rocketHTML()}</div>`;
+  b.innerHTML = h;
+  placeAll(true);
+}
+/** 같은 칸에 여럿이면 조금씩 비켜 선다 */
+function slotOffset(n, who) {
+  const s = G.s;
+  const here = s.players.map((p, i) => (p.pos === n ? "p" + i : null)).filter(Boolean);
+  if (s.rocket.pos === n) here.push("R");
+  const k = here.indexOf(who);
+  if (here.length <= 1 || k < 0) return { x: 0, y: 0, sc: 1 };
+  const c = G.cell * 0.24;
+  const spots = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]];
+  const [sx, sy] = spots[k % spots.length];
+  return { x: sx * c, y: sy * c, sc: 0.72 };
+}
+function placePiece(el, n, who, instant) {
+  if (!el) return;
+  const p = cellCenter(n), o = slotOffset(n, who);
+  const size = G.cell;
+  if (instant) el.style.transition = "none";
+  el.style.width = el.style.height = size + "px";
+  el.style.left = p.x - size / 2 + o.x + "px";
+  el.style.top = p.y - size / 2 + o.y + "px";
+  el.style.setProperty("--sc", o.sc);
+  if (instant) { void el.offsetWidth; el.style.transition = ""; }
+}
+function placeAll(instant) {
+  const s = G.s;
+  if (!s) return;
+  s.players.forEach((p, i) => placePiece($("#pc" + i), p.pos, "p" + i, instant));
+  placePiece($("#pcR"), s.rocket.pos, "R", instant);
+  markDanger();
+}
+function markDanger() {
+  const s = G.s;
+  s.players.forEach((p, i) => {
+    const el = $("#pc" + i);
+    if (!el) return;
+    el.dataset.danger = R.danger(s, i);
+    el.classList.toggle("now", i === G.current && s.phase === "players");
+  });
+}
+/** 카메라: 그 칸이 보이게 (200칸은 위아래로 따라간다) */
+function focusCell(n, instant) {
+  const v = $("#boardView");
+  if (!v) return;
+  const y = cellCenter(n).y;
+  const top = Math.max(0, y - v.clientHeight / 2);
+  if (Math.abs(v.scrollTop - top) < G.cell * 1.5 && !instant) return;
+  v.scrollTo({ top, behavior: instant || TEST ? "auto" : "smooth" });
+}
+function setMsg(t) {
+  const m = $("#msgText");
+  if (m) m.textContent = t;
+}
+
+/** 말을 한 칸씩 걸어서 (사다리·미끄럼틀은 쭉) */
+async function animateMove(who, from, to, mode) {
+  const el = who === "R" ? $("#pcR") : $("#pc" + who);
+  if (!el) return;
+  const key = who === "R" ? "R" : "p" + who;
+  const setPos = (n) => { if (who === "R") G.s.rocket.pos = n; else G.s.players[who].pos = n; };
+  const final = to;
+  if (mode === "walk" && Math.abs(to - from) <= 24 && from !== to) {
+    const d = to > from ? 1 : -1;
+    el.classList.add("walking");
+    for (let n = from + d; d > 0 ? n <= to : n >= to; n += d) {
+      setPos(n);
+      placePiece(el, n, key);
+      focusCell(n);
+      SFX.step();
+      await sleep(170);
+    }
+    el.classList.remove("walking");
+  } else {
+    el.classList.add(mode === "slide" ? "sliding" : mode === "ladder" ? "climbing" : "warping");
+    setPos(final);
+    placePiece(el, final, key);
+    focusCell(final);
+    await sleep(mode === "warp" ? 500 : 800);
+    el.classList.remove("sliding", "climbing", "warping");
+  }
+  setPos(final);
+  placeAll();
+}
+
+// ---------- 오른쪽 판 정보 ----------
+function renderPanel(opt) {
+  const s = G.s, el = $("#panel");
+  if (!s || !el) return;
+  opt = opt || {};
+  const cur = s.players[G.current] || s.players[0];
+  const rocketPhase = s.phase === "rocket";
+  const slot = (id, k) => id ? `<button class="mini-card cat-${R.CARDS[id].cat}" data-card="${id}" data-slot="${k}"><img src="${IMG.cardIcon(id)}" alt=""><span>${esc(R.CARDS[id].name)}</span></button>` : `<span class="mini-card empty">${k === "held" ? "일반" : "능력"}</span>`;
+  el.innerHTML = `
+    <div class="pn-top">
+      <button class="btn small" data-p="home" aria-label="처음으로">🏠</button>
+      <span class="round">${s.mode}칸 · ${s.round}라운드</span>
+      <button class="btn small" data-p="voice">${Store.data.settings.voice ? "🔊" : "🔇"}</button>
+      <button class="btn small" data-p="fast">${Store.data.settings.fast ? "⏩" : "▶️"}</button>
+    </div>
+    <div class="turn-card win-box ${rocketPhase ? "rocket-turn" : ""}" style="--pc:${rocketPhase ? "#333" : TRAINER[cur.trainer].color}">
+      ${rocketPhase ? `${rocketHTML()}<b>로켓단 차례!</b>` : `${trainerHTML(cur, "big")}<div><b>${esc(cur.name)}</b><small>의 차례 · ${cur.pos}번 칸</small></div>`}
+    </div>
+    <div class="dice-zone">
+      <div class="dice" id="dice">${(G.lastDice || [1]).map((v) => dieHTML(v)).join("")}</div>
+      <button class="btn huge primary" id="rollBtn" ${opt.roll ? "" : "disabled"}>🎲 굴리기</button>
+    </div>
+    ${rocketPhase ? "" : `<div class="hand">
+      <div class="hand-title">${esc(cur.name)}의 카드</div>
+      <div class="slots">${slot(cur.ability[0], "ability")}${slot(cur.ability[1], "ability")}${slot(cur.held, "held")}</div>
+    </div>`}
+    <ul class="plist">
+      ${s.players.map((p, i) => {
+        const dg = R.danger(s, i);
+        return `<li class="${i === G.current && !rocketPhase ? "now" : ""} dg-${dg}" style="--pc:${TRAINER[p.trainer].color}">
+          ${trainerHTML(p, "sm")}<span class="pname">${esc(p.name)}</span><b class="ppos">${p.pos}</b>
+          <span class="pst">${p.st.skip ? "💤" : ""}${p.st.minus6 ? "🐌-6" : ""}${p.st.minus2 ? "🚧-2" : ""}${p.st.safe ? "🛡️" : ""}${p.ability.length + (p.held ? 1 : 0) ? "🃏" + (p.ability.length + (p.held ? 1 : 0)) : ""}</span>
+          <span class="dg">${dg === "danger" ? "🚨 " + R.distance(s, i) + "칸" : dg === "caution" ? "⚠️ " + R.distance(s, i) + "칸" : ""}</span>
+        </li>`;
+      }).join("")}
+      <li class="rocket-row">${rocketHTML()}<span class="pname">로켓단</span><b class="ppos">${s.rocket.pos}</b>
+        <span class="pst">${s.rocket.skip ? "💤" : ""}${s.rocket.double ? "🔥×2" : ""}${s.rocket.reverse ? "🔄" : ""}</span></li>
+    </ul>`;
+  el.onclick = (e) => {
+    const b = e.target.closest("[data-p]");
+    if (b) {
+      SFX.pop();
+      if (b.dataset.p === "home") { if (!G.choosing || true) { G.stop(); renderTitle(); } }
+      if (b.dataset.p === "voice") { Store.data.settings.voice = !Store.data.settings.voice; Store.data.settings.sound = Store.data.settings.voice; Store.save(); b.textContent = Store.data.settings.voice ? "🔊" : "🔇"; }
+      if (b.dataset.p === "fast") { Store.data.settings.fast = !Store.data.settings.fast; Store.save(); b.textContent = Store.data.settings.fast ? "⏩" : "▶️"; toast(Store.data.settings.fast ? "빠르게 보기" : "보통 빠르기"); }
+      return;
+    }
+    const c = e.target.closest(".mini-card[data-card]");
+    if (c && !G.actionWait) showCardInfo(c.dataset.card);
+  };
+  markDanger();
+}
+function dieHTML(v) {
+  const pips = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] }[v] || [];
+  return `<span class="die" data-v="${v}">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<i class="${pips.includes(k) ? "pip" : ""}"></i>`).join("")}</span>`;
+}
+async function rollAnim(dice, rocket) {
+  const box = $("#dice");
+  if (!box) return;
+  SFX.dice();
+  for (let k = 0; k < 7; k++) {
+    box.innerHTML = dice.map(() => dieHTML(1 + Math.floor(Math.random() * 6))).join("");
+    box.classList.add("rolling");
+    await sleep(70);
+  }
+  box.classList.remove("rolling");
+  G.lastDice = dice;
+  box.innerHTML = dice.map((v) => dieHTML(v)).join("");
+  box.classList.toggle("rocket", !!rocket);
+}
+function showCardInfo(id, useBtn) {
+  const d = layer("modal card-modal", `<div class="card-big">${cardHTML(id, "big")}</div>
+    <div class="row">${useBtn ? `<button class="btn big primary" data-v="use">✨ 쓰기</button>` : ""}<button class="btn big" data-v="close">${useBtn ? "안 쓸래요" : "닫기"}</button></div>`);
+  say(R.CARDS[id].name);
+  return waitPick(d).then((v) => { d.remove(); return v; });
+}
+
+// =====================================================================
+// 규칙 엔진 ↔ 화면 (io)
+// =====================================================================
+const IO = {
+  async show(e) {
+    if (G.aborted) throw ABORT;
+    const s = G.s;
+    const P = (i) => s.players[i];
+    const nm = (i) => P(i).name;
+    switch (e.type) {
+      case "turn":
+        G.current = e.who;
+        renderPanel();
+        focusCell(P(e.who).pos);
+        setMsg(`${nm(e.who)}의 차례!`);
+        await say(nm(e.who), L.turn);
+        break;
+      case "skip":
+        setMsg(`💤 ${nm(e.who)}: ${L.skip}`);
+        await say(L.skip); await sleep(600);
+        renderPanel();
+        break;
+      case "card-use": {
+        const c = R.CARDS[e.card];
+        setMsg(`✨ ${nm(e.who)}: ${c.name}!`);
+        SFX.card();
+        const d = layer("flash-card", cardHTML(e.card, "big pop"));
+        await say(c.name);
+        await sleep(1100);
+        d.remove();
+        renderPanel();
+        break;
+      }
+      case "dice":
+        await rollAnim(e.dice);
+        setMsg(`🎲 ${e.dice.join(" + ")}${e.dice.length > 1 ? " = " + e.dice.reduce((a, b) => a + b, 0) : ""}!${e.lucky ? " (행운의 숫자)" : ""}`);
+        await say(String(e.dice.reduce((a, b) => a + b, 0)));
+        await sleep(350);
+        break;
+      case "modify": {
+        const t = e.mods.includes("minus6") ? L.minus6 : L.minus2;
+        setMsg(`${e.mods.includes("minus6") ? "🐌" : "🚧"} ${t} → ${e.move > 0 ? "+" : ""}${e.move}칸`);
+        await say(t);
+        await sleep(700);
+        break;
+      }
+      case "move":
+        await animateMove(e.who, e.from, e.to, e.via === "dice" || e.via === "reward" || e.via === "penalty" || (e.via === "card" && Math.abs(e.to - e.from) <= 15) ? "walk" : "warp");
+        renderPanel();
+        break;
+      case "chute":
+        setMsg(e.kind === "ladder" ? `🪜 ${L.ladder} ${e.from} → ${e.to}` : `🛝 ${L.slide} ${e.from} → ${e.to}`);
+        e.kind === "ladder" ? SFX.up() : SFX.down();
+        say(e.kind === "ladder" ? L.ladder : L.slide);
+        await animateMove(e.who, e.from, e.to, e.kind);
+        renderPanel();
+        break;
+      case "stay":
+        setMsg(L.stay); await say(L.stay); await sleep(500); break;
+      case "cell": {
+        const t = { quiz: L.cellQuiz, card: L.cellCard, rocket: L.cellRocket }[e.cell];
+        setMsg(t);
+        const c = $(`.cell[data-n="${P(e.who).pos}"]`);
+        if (c) { c.classList.add("ping"); setTimeout(() => c.classList.remove("ping"), 1200); }
+        await say(t);
+        await sleep(400);
+        break;
+      }
+      case "draw":
+        await revealCard(e.who, e.card, e.from);
+        renderPanel();
+        break;
+      case "effect": break;
+      case "swap": setMsg(`🔄 ${nm(e.who)} ↔ ${nm(e.target)} ${L.swap}`); say(L.swap); await sleep(500); break;
+      case "status":
+        setMsg(`🐌 ${nm(e.target)}: 다음 이동 -6칸!`); renderPanel(); await sleep(900); break;
+      case "psyduck":
+        setMsg(`🌀 로켓단이 ${e.dir > 0 ? "앞으로" : "뒤로"} ${e.n}칸 휘청!`); await sleep(900); break;
+      case "lullaby":
+        setMsg(e.ok ? `💤 ${nm(e.target)}: ${L.lullabyOk}` : `😳 ${L.lullabyFail}`);
+        await coinFlip(e.ok);
+        await say(e.ok ? L.lullabyOk : L.lullabyFail);
+        renderPanel();
+        break;
+      case "steal":
+        setMsg(`😼 ${nm(e.who)}: ${L.steal} (${R.CARDS[e.card].name})`); await say(L.steal); await sleep(500); break;
+      case "reward":
+        if (e.why === "stamp") { setMsg(`⭐ ${L.stamp}`); await say(L.stamp); await sleep(500); }
+        else if (e.why === "challenge-miss") { setMsg(L.challengeMiss); await say(L.challengeMiss); }
+        else { setMsg(`👟 ${nm(e.who)} +${e.move}칸!`); await sleep(400); }
+        break;
+      case "nothing": setMsg(L.nothing); await say(L.nothing); await sleep(400); break;
+      case "bonus-quiz": setMsg(`⭐ ${L.bonus}`); await say(L.bonus); await sleep(300); break;
+      case "regroup":
+        setMsg(`💨 ${L.regroup}`); say(L.regroup);
+        await animateMove("R", e.from, e.to, "warp"); break;
+      case "rocket-turn":
+        G.current = -1;
+        renderPanel();
+        focusCell(s.rocket.pos);
+        setMsg(`👿 ${L.rocketTurn}`);
+        await say(L.rocketTurn);
+        break;
+      case "rocket-rest":
+        setMsg(`💤 ${L.rocketRest}`); await say(L.rocketRest); await sleep(500); break;
+      case "rocket-dice":
+        await rollAnim(e.dice, true);
+        setMsg(`👿 ${e.dice.join(" + ")}! ${nm(e.target)} 쪽으로 ${e.dir > 0 ? "앞으로" : "뒤로"} 쫓아간다옹!`);
+        $("#pc" + e.target) && $("#pc" + e.target).classList.add("target");
+        await say(L.rocketChase);
+        $("#pc" + e.target) && $("#pc" + e.target).classList.remove("target");
+        break;
+      case "rocket-move":
+        await animateMove("R", e.from, e.to, e.via === "dice" || Math.abs(e.to - e.from) <= 12 ? "walk" : "warp");
+        renderPanel();
+        break;
+      case "rocket-chute":
+        setMsg(e.kind === "ladder" ? `👿🪜 로켓단도 사다리! ${e.from} → ${e.to}` : `👿🛝 로켓단도 미끄럼틀! ${e.from} → ${e.to}`);
+        e.kind === "ladder" ? SFX.up() : SFX.down();
+        await animateMove("R", e.from, e.to, e.kind);
+        renderPanel();
+        break;
+      case "rocket-warp":
+        if (e.why === "kick") await kickScene(e);
+        else {
+          setMsg(`💥 ${L.rocketWarp}`);
+          say(L.rocketWarp);
+          await animateMove("R", e.from, e.to, "warp");
+        }
+        renderPanel();
+        break;
+      case "capture": await captureScene(e.who); break;
+      case "capture-safe": await captureLine(`🛡️ ${L.safe}`, L.safe); break;
+      case "defend": await captureLine(`💧 ${R.CARDS[e.card].name}! ${L.defend}`, L.defend); break;
+      case "escaped": await captureLine(`🎉 ${L.escaped}`, L.escaped); break;
+      case "escape-fail": await captureLine(`😢 ${L.escapeFail}`, L.escapeFail); break;
+      case "win": break;
+    }
+    if (G.aborted) throw ABORT;
+  },
+
+  async choose(kind, data) {
+    if (G.aborted) throw ABORT;
+    const s = G.s;
+    const P = (i) => s.players[i];
+    if (TEST && window.__T && window.__T.auto && kind !== "action") return window.__T.auto(kind, data);
+    switch (kind) {
+      case "action": return chooseAction(data);
+      case "target": {
+        const c = R.CARDS[data.card];
+        say(L.pickTarget);
+        const d = layer("modal", `<div class="win-box pick-box"><h2>${esc(c.name)}: ${esc(L.pickTarget)}</h2>
+          <div class="pick-row">${data.options.map((i) => `<button class="pick-p" data-v="${i}" style="--pc:${TRAINER[P(i).trainer].color}">${trainerHTML(P(i), "big")}<b>${esc(P(i).name)}</b><small>${P(i).pos}번 칸</small></button>`).join("")}</div></div>`);
+        const v = await waitPick(d); d.remove(); return +v;
+      }
+      case "direction": {
+        const c = R.CARDS[data.card];
+        say(L.pickDir);
+        const who = data.target != null ? P(data.target).name + "의 " : "로켓단을 ";
+        const d = layer("modal", `<div class="win-box pick-box"><h2>${esc(c.name)}: ${esc(L.pickDir)}</h2>
+          <div class="row"><button class="btn big" data-v="-1">⬅ ${esc(who)}${data.n}칸 뒤</button><button class="btn big primary" data-v="1">${esc(who)}${data.n}칸 앞 ➡</button></div></div>`);
+        const v = await waitPick(d); d.remove(); return +v;
+      }
+      case "cell": return chooseCell(data);
+      case "pick": {
+        say(L.pickTwo);
+        const d = layer("modal", `<div class="win-box pick-box"><h2>${esc(L.pickTwo)}</h2>
+          <div class="pick-row cards">${data.cards.map((id, k) => `<button class="pick-c" data-v="${k}">${cardHTML(id)}</button>`).join("")}</div></div>`);
+        const v = await waitPick(d); d.remove(); return +v;
+      }
+      case "discard": {
+        say(L.full);
+        const all = data.have.concat([data.add]);
+        const d = layer("modal", `<div class="win-box pick-box"><h2>🃏 ${esc(L.full)}</h2>
+          <div class="pick-row cards">${all.map((id, k) => `<button class="pick-c ${k === all.length - 1 ? "new" : ""}" data-v="${id}">${cardHTML(id)}${k === all.length - 1 ? '<span class="badge-new">새 카드</span>' : ""}<span class="drop">🗑 버리기</span></button>`).join("")}</div></div>`);
+        const v = await waitPick(d); d.remove(); return v;
+      }
+      case "reward": {
+        say(L.rewardPick);
+        const d = layer("modal", `<div class="win-box pick-box reward"><h2>🎉 ${esc(L.great)}</h2>
+          <div class="row"><button class="btn big primary" data-v="card">🃏 능력 카드 받기</button><button class="btn big" data-v="move">👟 ${data.move}칸 앞으로</button></div></div>`);
+        const v = await waitPick(d); d.remove(); return v;
+      }
+      case "reroll": {
+        say(L.reroll);
+        const d = layer("modal", `<div class="win-box pick-box"><h2>🎲 ${data.dice.join(" + ")} — ${esc(L.reroll)}</h2><p>"한 번 더!" 카드를 쓰면 다시 굴려요.</p>
+          <div class="row"><button class="btn big primary" data-v="1">🎲 다시 굴리기</button><button class="btn big" data-v="0">이대로 갈래요</button></div></div>`);
+        const v = await waitPick(d); d.remove(); return v === "1";
+      }
+      case "lucky": {
+        say(L.lucky);
+        const d = layer("modal", `<div class="win-box pick-box"><h2>🍀 ${esc(L.lucky)}</h2>
+          <div class="row dice-pick">${[1, 2, 3, 4, 5, 6].map((v) => `<button class="die-btn" data-v="${v}">${dieHTML(v)}</button>`).join("")}</div></div>`);
+        const v = await waitPick(d); d.remove(); return +v;
+      }
+      case "defend": {
+        say(L.defendAsk);
+        const host = $(".capture-scene .cap-ask") ? $(".capture-scene") : null;
+        const d = layer("modal over-capture", `<div class="win-box pick-box"><h2>🛡️ ${esc(L.defendAsk)}</h2>
+          <div class="pick-row cards">${data.options.map((id) => `<button class="pick-c" data-v="${id}">${cardHTML(id)}</button>`).join("")}</div>
+          <button class="btn big" data-v="">안 쓰고 문제 풀래요</button></div>`);
+        const v = await waitPick(d); d.remove(); void host; return v || null;
+      }
+    }
+    return null;
+  },
+
+  async quiz(pi, ctx) {
+    if (G.aborted) throw ABORT;
+    if (TEST && window.__T && window.__T.autoQuiz) return window.__T.autoQuiz(pi, ctx);
+    return Quiz.run(pi, ctx);
+  },
+};
+
+/** 차례 시작: 카드 쓰기 또는 굴리기 */
+function chooseAction(data) {
+  return new Promise((resolve, reject) => {
+    G.reject = reject;
+    renderPanel({ roll: true });
+    setMsg(data.cards.some((c) => c.ok) ? "카드를 쓰거나, 주사위를 굴려요!" : "주사위를 굴려요!");
+    const panel = $("#panel");
+    const usable = new Set(data.cards.filter((c) => c.ok).map((c) => c.id));
+    $$(".mini-card[data-card]", panel).forEach((b) => b.classList.toggle("usable", usable.has(b.dataset.card)));
+    G.actionWait = true;
+    const done = (v) => { G.actionWait = false; G.reject = null; panel.removeEventListener("click", h, true); $("#rollBtn") && ($("#rollBtn").disabled = true); resolve(v); };
+    const h = async (e) => {
+      if (e.target.closest("#rollBtn")) { e.stopPropagation(); SFX.pop(); Voice.unlock(); return done("roll"); }
+      const c = e.target.closest(".mini-card[data-card]");
+      if (!c) return;
+      e.stopPropagation();
+      const id = c.dataset.card;
+      const info = data.cards.find((x) => x.id === id);
+      if (!info) return;
+      if (!info.ok) { showCardInfo(id).then(() => {}).catch(() => {}); toast(info.why); return; }
+      G.actionWait = false;
+      const v = await showCardInfo(id, true).catch(() => null);
+      G.actionWait = true;
+      if (v === "use") done(id);
+    };
+    panel.addEventListener("click", h, true);
+    if (TEST && window.__T && window.__T.auto) setTimeout(() => done(window.__T.auto("action", data)), 0);
+  });
+}
+/** 팬텀: 판 위에서 칸 고르기 */
+function chooseCell(data) {
+  return new Promise((resolve, reject) => {
+    G.reject = reject;
+    say(L.pickCell);
+    setMsg(`👻 ${L.pickCell} (${data.from}~${data.to})`);
+    const cells = [];
+    for (let n = data.from; n <= data.to; n++) { const c = $(`.cell[data-n="${n}"]`); if (c) { c.classList.add("selectable"); cells.push(c); } }
+    focusCell(Math.round((data.from + data.to) / 2));
+    const b = $("#board");
+    const h = (e) => {
+      const c = e.target.closest(".cell.selectable");
+      if (!c) return;
+      SFX.pop();
+      cells.forEach((x) => x.classList.remove("selectable"));
+      b.removeEventListener("click", h);
+      G.reject = null;
+      resolve(+c.dataset.n);
+    };
+    b.addEventListener("click", h);
+  });
+}
+
+async function revealCard(who, id, from) {
+  const c = R.CARDS[id];
+  SFX.card();
+  const title = { deck: "카드를 뽑았다!", rocket: "로켓단 카드!", reward: "능력 카드를 받았다!", chest: "보물상자에서 나왔다!", pick: "이 카드로 결정!" }[from] || "카드!";
+  const keep = c.keep === "now" ? "바로 써요!" : "보관함에 넣어요";
+  const d = layer("modal card-modal reveal", `<h2 class="reveal-title">${esc(title)}</h2>
+    <div class="card-flip"><div class="card-back"><img src="${IMG.tile("card")}" alt=""></div>${cardHTML(id, "big")}</div>
+    <p class="keep">${esc(keep)}</p>
+    <button class="btn big primary" data-v="ok">좋아!</button>`);
+  await sleep(250);
+  d.classList.add("flipped");
+  say(c.name, c.text);
+  if (TEST && !window.__TEST_SLOW_EXPLAIN) { await sleep(10); d.remove(); return; }
+  await waitPick(d);
+  d.remove();
+}
+async function coinFlip(ok) {
+  const d = layer("flash coin", `<div class="coin-spin">${ok ? "💤" : "😳"}</div>`);
+  await sleep(1100);
+  d.remove();
+}
+
+// ---------- 로켓단 포획 장면 ----------
+async function captureScene(pi) {
+  const p = G.s.players[pi];
+  SFX.alarm();
+  closeLayers(".capture-scene");
+  $$(".capture-scene").forEach((x) => x.remove());
+  const d = layer("capture-scene", `
+    <div class="cap-bg"></div>
+    <div class="cap-rocket">${rocketHTML()}</div>
+    <div class="cap-player">${trainerHTML(p, "big")}<b>${esc(p.name)}</b></div>
+    <div class="cap-line win-box"><span id="capText">🚨 ${esc(L.caught)}</span></div>`);
+  setMsg(`🚨 ${p.name}: ${L.caught}`);
+  await say(L.caughtRocket);
+  await say(L.caught);
+  await sleep(500);
+  d.dataset.ok = "1";
+}
+async function captureLine(text, voice) {
+  const d = $(".capture-scene");
+  setMsg(text);
+  if (d) {
+    $("#capText", d).textContent = text;
+    d.classList.toggle("good", !/아쉬워/.test(text));
+  }
+  await say(voice);
+  await sleep(900);
+}
+async function kickScene(e) {
+  let d = $(".capture-scene");
+  if (!d) d = layer("capture-scene", `<div class="cap-bg"></div><div class="cap-rocket">${rocketHTML()}</div><div class="cap-line win-box"><span id="capText"></span></div>`);
+  d.classList.add("kick");
+  $("#capText", d).textContent = `✨ ${L.kick}`;
+  setMsg(`✨ ${L.kick} (${e.from} → ${e.to})`);
+  SFX.up();
+  await say(L.kick);
+  await sleep(900);
+  d.remove();
+  await animateMove("R", e.from, e.to, "warp");
+}
+
+// =====================================================================
+// 퀴즈 (plan §10.1: 문제 → 힌트 → 풀이 + 비슷한 문제)
+// =====================================================================
+const Quiz = {
+  async run(pi, ctx) {
+    const s = G.s, p = s.players[pi];
+    const name = p.name;
+    const rec = (Store.data.learn[name] = Store.data.learn[name] || Learn.blank());
+    const q = Learn.pick(p, rec, G.used, Math.random);
+    const title = { cell: "📘 퀴즈 칸", bonus: "⭐ 보너스 퀴즈", escape: "🚨 로켓단 탈출 퀴즈", challenge: "💡 퀴즈 도전 (+12칸)" }[ctx.reason] || "퀴즈";
+    const d = layer("quiz-layer", `<div class="quiz win-box" style="--pc:${TRAINER[p.trainer].color}">
+      <header class="qz-head">${trainerHTML(p, "sm")}<b>${esc(name)}</b><span class="qz-title">${title}</span><span class="qz-sub" id="qzSub"></span></header>
+      <div class="qz-body" id="qzBody"></div>
+    </div>`);
+    let res;
+    try {
+      if (await this.ask(d, q, 1)) res = "first";
+      else {
+        SFX.bad();
+        await this.hint(d, q);
+        if (await this.ask(d, q, 2)) res = "hint";
+        else {
+          await this.explain(d, q);
+          const q2 = Learn.similar(q, Math.random, G.used);
+          say(L.similar);
+          if (await this.ask(d, q2, 3)) res = "explained";
+          else { await this.reveal(d, q2); res = "fail"; }
+        }
+      }
+    } catch (e) { d.remove(); throw e; }
+    if (res === "first" || res === "hint") { SFX.good(); await this.cheer(d, res); }
+    d.remove();
+    // 기록
+    Learn.record(rec, q, res);
+    p.qs.n++; p.qs[res]++; p.qs[q.subject]++;
+    p.qs.weak = p.qs.weak || {};
+    if (res !== "first") p.qs.weak[q.concept] = (p.qs.weak[q.concept] || 0) + 1;
+    Store.save();
+    return res;
+  },
+
+  /** 문제 하나 보여 주고 답을 받는다 → 맞았나 */
+  ask(d, q, stage) {
+    G.lastQ = q;
+    const body = $("#qzBody", d);
+    $("#qzSub", d).textContent = `${q.subject === "math" ? "수학" : "영어"} · ${q.name} · LV.${q.level}${stage === 3 ? " · 비슷한 문제" : ""}`;
+    const hintBox = stage === 2 ? `<div class="qz-hint">💡 ${esc(q.hint)}</div>` : "";
+    body.innerHTML = `
+      ${hintBox}
+      <p class="qz-prompt">${esc(q.prompt).replace(/\n/g, "<br>")}</p>
+      ${q.listen || (q.say && !q.sayAfter) ? `<button class="btn listen" data-k="listen">🔊 ${q.listen ? "다시 듣기" : "들어 보기"}</button>` : ""}
+      ${q.picture ? `<div class="qz-pic">${esc(q.picture)}</div>` : ""}
+      ${q.visual ? visualHTML(q.visual) : ""}
+      ${q.expr ? `<div class="qz-expr">${esc(q.expr)}</div>` : ""}
+      <div class="qz-answer" id="qzAns">${answerHTML(q)}</div>
+      ${stage === 2 ? `<button class="btn small ghost" data-k="giveup">📖 풀이 보기</button>` : ""}
+    `;
+    if (q.listen) setTimeout(() => sayEn(q.say), 250);
+    else if (q.say && !q.sayAfter) setTimeout(() => sayEn(q.say), 250);
+    return new Promise((resolve, reject) => {
+      G.reject = reject;
+      const state = { typed: "", order: [] };
+      const finish = async (ok, picked) => {
+        body.removeEventListener("click", h);
+        G.reject = null;
+        if (picked) picked.classList.add(ok ? "right" : "wrong");
+        body.classList.add(ok ? "ok" : "no");
+        if (ok) { say(L.correct); if (q.subject === "en" && (q.sayAfter || q.sayAnswer)) setTimeout(() => sayEn(q.sayAnswer ? q.answer : q.say), 700); }
+        else say(L.wrong);
+        await sleep(ok ? 900 : 1000);
+        body.classList.remove("ok", "no");
+        resolve(ok);
+      };
+      const h = (e) => {
+        const b = e.target.closest("[data-k]");
+        if (!b || b.disabled) return;
+        const k = b.dataset.k;
+        if (k === "listen") { sayEn(q.say); return; }
+        if (k === "giveup") { finish(false); return; }
+        SFX.pop();
+        if (k === "choice") { if (q.subject === "en" && q.choiceType === "text" && /^[A-Za-z]/.test(b.dataset.v) && b.dataset.v.length > 1) sayEn(b.dataset.v); return finish(b.dataset.v === q.answer, b); }
+        if (k === "key") {
+          const v = b.dataset.v;
+          if (v === "del") state.typed = state.typed.slice(0, -1);
+          else if (v === "ok") { if (state.typed) return finish(state.typed.toUpperCase() === String(q.answer).toUpperCase()); }
+          else if (state.typed.length < (q.keypad === "letters" ? 1 : 5)) state.typed += v;
+          $("#qzTyped", body).textContent = state.typed || "?";
+          return;
+        }
+        if (k === "tok") {
+          state.order.push(+b.dataset.i);
+          b.disabled = true;
+        }
+        if (k === "untok") {
+          const i = +b.dataset.i;
+          state.order = state.order.filter((x) => x !== i);
+          const t = $(`[data-k="tok"][data-i="${i}"]`, body);
+          if (t) t.disabled = false;
+        }
+        if (k === "undo") {
+          const i = state.order.pop();
+          const t = $(`[data-k="tok"][data-i="${i}"]`, body);
+          if (t) t.disabled = false;
+        }
+        if (k === "tok" || k === "untok" || k === "undo") {
+          $("#qzLine", body).innerHTML = state.order.map((i) => `<button class="tok on" data-k="untok" data-i="${i}">${esc(q.tokens[i])}</button>`).join("") || `<span class="ph">눌러서 채워요</span>`;
+          $("#qzCheck", body).disabled = state.order.length !== q.answer.length;
+          return;
+        }
+        if (k === "check") {
+          const got = state.order.map((i) => q.tokens[i]);
+          return finish(JSON.stringify(got) === JSON.stringify(q.answer));
+        }
+      };
+      body.addEventListener("click", h);
+    });
+  },
+
+  async hint(d, q) {
+    const body = $("#qzBody", d);
+    body.insertAdjacentHTML("afterbegin", "");
+    await say(L.hint);
+    void q;
+  },
+
+  /** 단계별 풀이 + 그림 (곱셈은 묶음이 하나씩 나타난다) */
+  explain(d, q) {
+    const body = $("#qzBody", d);
+    $("#qzSub", d).textContent = `같이 풀어 봐요 · ${q.name}`;
+    body.innerHTML = `<div class="qz-explain">
+      <p class="qz-prompt small">${esc(q.prompt).replace(/\n/g, "<br>")}</p>
+      ${q.explainVisual ? `<div class="ex-visual">${explainVisualHTML(q.explainVisual)}</div>` : q.picture ? `<div class="qz-pic">${esc(q.picture)}</div>` : q.visual ? visualHTML(q.visual) : ""}
+      <ol class="ex-steps">${q.explain.map((t) => `<li>${esc(t)}</li>`).join("")}</ol>
+      <div class="ex-answer">정답: <b>${esc(Array.isArray(q.answer) ? q.answer.join(" ") : q.answer)}</b>${q.unit ? esc(q.unit) : ""}</div>
+      <button class="btn big primary" data-v="next" disabled>💪 비슷한 문제 풀기</button>
+    </div>`;
+    say(L.explain);
+    if (q.subject === "en" && q.say) setTimeout(() => sayEn(q.sayAnswer ? q.answer : q.say), 900);
+    return (async () => {
+      const groups = $$(".grp", body);
+      for (const g of groups) { await sleep(650); g.classList.add("in"); SFX.pop(); }
+      for (const li of $$(".ex-steps li", body)) { await sleep(700); li.classList.add("in"); }
+      await sleep(400);
+      $(".ex-answer", body).classList.add("in");
+      const btn = $("[data-v=next]", body);
+      btn.disabled = false;
+      if (TEST && !window.__TEST_SLOW_EXPLAIN) return;
+      await waitPick(body);
+    })();
+  },
+
+  async reveal(d, q) {
+    const body = $("#qzBody", d);
+    body.innerHTML = `<div class="qz-explain"><p class="qz-prompt">${esc(L.answerIs)}</p>
+      <div class="ex-answer in big">${esc(Array.isArray(q.answer) ? q.answer.join(" ") : q.answer)}${q.unit ? esc(q.unit) : ""}</div>
+      <ol class="ex-steps">${q.explain.map((t) => `<li class="in">${esc(t)}</li>`).join("")}</ol>
+      <button class="btn big primary" data-v="ok">계속하기</button></div>`;
+    say(L.answerIs);
+    if (TEST) return;
+    await waitPick(body);
+  },
+
+  async cheer(d, res) {
+    const body = $("#qzBody", d);
+    body.insertAdjacentHTML("beforeend", `<div class="cheer">${res === "first" ? "🌟 한 번에 정답!" : "👍 힌트 보고 정답!"}</div>`);
+    if (res === "first") say(L.great);
+    await sleep(800);
+  },
+};
+
+function answerHTML(q) {
+  if (q.kind === "choice") {
+    return `<div class="choices ${q.choiceType}">${q.choices.map((c) => {
+      if (q.choiceType === "swatch") return `<button class="ch swatch" data-k="choice" data-v="${esc(c)}" style="--sw:${EnQ.COLORS[c][0]}" aria-label="${esc(c)}"></button>`;
+      return `<button class="ch" data-k="choice" data-v="${esc(c)}">${esc(c)}</button>`;
+    }).join("")}</div>`;
+  }
+  if (q.kind === "input") {
+    const keys = q.keypad === "letters" ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("") : ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+    return `<div class="typed"><span id="qzTyped">?</span>${q.unit ? `<small>${esc(q.unit)}</small>` : ""}</div>
+      <div class="keypad ${q.keypad}">${keys.map((k) => `<button class="key" data-k="key" data-v="${k}">${k}</button>`).join("")}
+      <button class="key del" data-k="key" data-v="del">⌫</button><button class="key ok" data-k="key" data-v="ok">확인</button></div>`;
+  }
+  if (q.kind === "order") {
+    return `<div class="line" id="qzLine"><span class="ph">눌러서 채워요</span></div>
+      <div class="tokens">${q.tokens.map((t, i) => `<button class="tok" data-k="tok" data-i="${i}">${esc(t)}</button>`).join("")}</div>
+      <div class="row"><button class="btn" data-k="undo">↩ 되돌리기</button><button class="btn primary" id="qzCheck" data-k="check" disabled>확인</button></div>`;
+  }
+  return "";
+}
+
+// ---------- 문제 그림 ----------
+function itemHTML(it) {
+  return it && it.img ? `<img class="it" src="assets/items/${it.img}.png" alt="">` : `<span class="it">${it ? it.emoji : "⭐"}</span>`;
+}
+function visualHTML(v) {
+  switch (v.type) {
+    case "clock": return `<div class="vis">${clockSVG(v.h, v.m)}</div>`;
+    case "coins": return `<div class="vis coins">${Array(v.c500).fill('<span class="coin c500">500</span>').join("")}${Array(v.c100).fill('<span class="coin c100">100</span>').join("")}</div>`;
+    case "shape": return `<div class="vis">${shapeSVG(v.n)}</div>`;
+    case "row": return `<div class="vis row-items"><span class="side">왼쪽</span>${v.items.map((x) => `<span class="ri">${x}</span>`).join("")}<span class="side">오른쪽</span></div>`;
+    case "groups": return `<div class="vis groups">${Array.from({ length: v.b }, () => `<span class="grp in">${Array(v.a).fill(itemHTML(v.item)).join("")}</span>`).join("")}</div>`;
+    case "place": return `<div class="vis">${placeHTML(v)}</div>`;
+  }
+  return "";
+}
+function explainVisualHTML(v) {
+  if (v.type === "groups") {
+    return `<div class="groups ex">${Array.from({ length: v.b }, (_, k) => `<span class="grp"><span class="gi">${Array(v.a).fill(itemHTML(v.item)).join("")}</span><b class="acc">${v.acc ? v.acc[k] : v.a * (k + 1)}</b></span>`).join("")}</div>`;
+  }
+  if (v.type === "blocks") {
+    const blk = (n) => `<span class="blk">${Array(Math.floor(n / 10)).fill('<i class="ten"></i>').join("")}${Array(n % 10).fill('<i class="one"></i>').join("")}<b>${n}</b></span>`;
+    return `<div class="blocks">${blk(v.a)}<span class="op">${v.op === "+" ? "+" : "−"}</span>${blk(v.b)}</div>`;
+  }
+  if (v.type === "story") {
+    let cur = v.steps[0];
+    return `<div class="story"><span class="st">${cur}</span>${v.steps.slice(1).map((d) => { cur += d; return `<span class="arrow">${d > 0 ? "+" + d : d}</span><span class="st">${cur}</span>`; }).join("")}</div>`;
+  }
+  return "";
+}
+function clockSVG(h, m) {
+  const ha = ((h % 12) + m / 60) * 30, ma = m * 6;
+  const nums = Array.from({ length: 12 }, (_, i) => {
+    const a = (i + 1) * 30 * Math.PI / 180;
+    return `<text x="${50 + 37 * Math.sin(a)}" y="${54 + -37 * Math.cos(a)}" text-anchor="middle" font-size="10">${i + 1}</text>`;
+  }).join("");
+  return `<svg class="clock" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47" fill="#fff" stroke="#222" stroke-width="4"/>${nums}
+    <line x1="50" y1="50" x2="${50 + 22 * Math.sin(ha * Math.PI / 180)}" y2="${50 - 22 * Math.cos(ha * Math.PI / 180)}" stroke="#e5484d" stroke-width="5" stroke-linecap="round"/>
+    <line x1="50" y1="50" x2="${50 + 34 * Math.sin(ma * Math.PI / 180)}" y2="${50 - 34 * Math.cos(ma * Math.PI / 180)}" stroke="#2f6fd6" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="50" cy="50" r="3" fill="#222"/></svg>`;
+}
+function shapeSVG(n) {
+  const pts = Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * 2 * Math.PI - Math.PI / 2;
+    return [50 + 40 * Math.cos(a), 52 + 40 * Math.sin(a)];
+  });
+  return `<svg class="shape" viewBox="0 0 100 100"><polygon points="${pts.map((p) => p.join(",")).join(" ")}" fill="#ffd84d" stroke="#222" stroke-width="3"/>${pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="3.5" fill="#e5484d"/>`).join("")}</svg>`;
+}
+function placeHTML(v) {
+  const pos = { in: "p-in", on: "p-on", under: "p-under", "next to": "p-next", behind: "p-behind" }[v.prep];
+  return `<div class="place ${pos}"><span class="thing">${v.thing}</span><span class="obj">${v.obj}</span>${v.prep === "in" ? `<span class="thing front">${v.thing}</span>` : ""}</div>`;
+}
+
+// =====================================================================
+// 결과
+// =====================================================================
+async function finishGame(s) {
+  const w = s.players[s.winner];
+  SFX.win();
+  say(w.name, L.win);
+  const rank = s.players.map((p, i) => ({ p, i })).sort((a, b) => (a.i === s.winner ? -1 : b.i === s.winner ? 1 : b.p.pos - a.p.pos));
+  // 기록 (한 판 요약)
+  Store.data.history.unshift({ at: Date.now(), mode: s.mode, rounds: s.round, winner: w.name, mins: Math.round((Date.now() - (s.started || Date.now())) / 60000),
+    players: s.players.map((p) => ({ name: p.name, pos: p.pos, qs: p.qs })) });
+  Store.data.history = Store.data.history.slice(0, 30);
+  s.players.forEach((p) => { const r = Store.data.learn[p.name]; if (r) r.games = (r.games || 0) + 1; });
+  Store.data.game = null;
+  Store.save();
+  const medal = ["🥇", "🥈", "🥉", "🎖️"];
+  show(`
+  <div class="result">
+    <div class="podium">
+      <div class="win-bg"></div>
+      <div class="champ">${trainerHTML(w, "huge")}<h1>${esc(w.name)} 우승!</h1><p>${s.mode}칸 · ${s.round}라운드 · 퀴즈 ${s.quizzes}문제 · 로켓단 포획 ${s.captures}번</p></div>
+    </div>
+    <div class="res-list">
+      ${rank.map(({ p }, k) => {
+        const q = p.qs || { n: 0 };
+        const weak = Object.keys(q.weak || {}).slice(0, 3).map((c) => Learn.conceptName(c));
+        return `<div class="win-box res-row" style="--pc:${TRAINER[p.trainer].color}">
+          <span class="medal">${medal[k]}</span>${trainerHTML(p, "sm")}<b>${esc(p.name)}</b><span class="rpos">${p.pos}칸</span>
+          <span class="rq">📝 ${q.n}문제 (수학 ${q.math || 0} · 영어 ${q.en || 0}) · 🌟 바로 ${q.first || 0} · 💡 힌트 ${q.hint || 0} · ⭐ 도장 ${q.explained || 0}</span>
+          ${weak.length ? `<span class="rweak">다음에 복습: ${weak.map(esc).join(", ")}</span>` : ""}
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="row res-btns"><button class="btn big primary" data-a="again">🔁 한 판 더</button><button class="btn big" data-a="home">🏠 처음으로</button></div>
+  </div>`, "screen-result");
+  $("#app").onclick = (e) => {
+    const b = e.target.closest("[data-a]");
+    if (!b) return;
+    SFX.pop();
+    if (b.dataset.a === "again") startGame(Store.data.setup || DEFAULT_SETUP);
+    else renderTitle();
+  };
+}
+
+// =====================================================================
+// 부모 화면 (두 자리 곱셈 잠금)
+// =====================================================================
+function parentGate() {
+  const a = 12 + Math.floor(Math.random() * 28), b = 3 + Math.floor(Math.random() * 7);
+  let typed = "";
+  const d = layer("modal", `<div class="win-box gate"><h2>🔒 부모 화면</h2><p>어른만 열 수 있어요: <b>${a} × ${b} = ?</b></p>
+    <div class="typed"><span id="gateT">?</span></div>
+    <div class="keypad digits">${"1234567890".split("").map((k) => `<button class="key" data-v="${k}">${k}</button>`).join("")}<button class="key del" data-v="del">⌫</button><button class="key ok" data-v="ok">확인</button></div>
+    <button class="btn" data-v="close">닫기</button></div>`);
+  d.onclick = (e) => {
+    const k = e.target.closest("[data-v]");
+    if (!k) return;
+    const v = k.dataset.v;
+    if (v === "close") return d.remove();
+    if (v === "del") typed = typed.slice(0, -1);
+    else if (v === "ok") {
+      if (+typed === a * b) { d.remove(); renderParent(); return; }
+      typed = ""; toast("다시 해 보세요");
+    } else if (typed.length < 4) typed += v;
+    $("#gateT", d).textContent = typed || "?";
+  };
+}
+function renderParent() {
+  const learn = Store.data.learn;
+  const names = Object.keys(learn);
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "-");
+  show(`
+  <div class="parent">
+    <header class="bar"><button class="btn" data-a="back">◀ 처음</button><h2>🔒 학습 기록</h2><span></span></header>
+    ${names.length ? names.map((n) => {
+      const r = learn[n];
+      const cs = Object.entries(r.concepts);
+      const sum = (k, f) => cs.filter(([c]) => !f || c[0] === f).reduce((a, [, v]) => a + v[k], 0);
+      const tot = (f) => sum("n", f);
+      const weak = Learn.weakList(r, 3);
+      return `<section class="win-box pr">
+        <h3>${esc(n)} <small>${r.games || 0}판 · ${r.total}문제</small></h3>
+        <div class="pr-stats">
+          <div><b>수학</b> ${tot("M")}문제 · 혼자 정답 ${pct(sum("first", "M"), tot("M"))} · 힌트 ${pct(sum("hint", "M"), tot("M"))}</div>
+          <div><b>영어</b> ${tot("E")}문제 · 혼자 정답 ${pct(sum("first", "E"), tot("E"))} · 힌트 ${pct(sum("hint", "E"), tot("E"))}</div>
+          <div><b>이해가 더 필요한 개념</b> ${weak.length ? weak.map((w) => esc(w.name)).join(", ") : "없음 👍"}</div>
+        </div>
+        <details><summary>개념별 자세히</summary><table class="pr-table"><tr><th>개념</th><th>문제</th><th>바로</th><th>힌트</th><th>풀이 후</th><th>못 풂</th></tr>
+          ${cs.sort().map(([c, v]) => `<tr class="${v.needReview ? "need" : ""}"><td>${c} ${esc(Learn.conceptName(c))}</td><td>${v.n}</td><td>${v.first}</td><td>${v.hint}</td><td>${v.explained}</td><td>${v.fail}</td></tr>`).join("")}
+        </table></details>
+      </section>`;
+    }).join("") : `<section class="win-box"><p>아직 기록이 없어요. 한 판 놀고 오세요!</p></section>`}
+    <section class="win-box">
+      <h3>최근 판</h3>
+      <ul class="hist">${Store.data.history.slice(0, 10).map((h) => `<li>${new Date(h.at).toLocaleDateString("ko-KR")} · ${h.mode}칸 · ${h.rounds}라운드 · 약 ${h.mins}분 · 🏆 ${esc(h.winner)}</li>`).join("") || "<li>없음</li>"}</ul>
+    </section>
+    <section class="win-box danger-zone"><h3>기록 지우기</h3><p>모든 학습 기록을 지우려면 <b>초기화</b> 라고 써 주세요.</p>
+      <input id="wipeIn" placeholder="초기화" autocomplete="off"><button class="btn" data-a="wipe">지우기</button></section>
+  </div>`, "screen-parent");
+  $("#app").onclick = (e) => {
+    const b = e.target.closest("[data-a]");
+    if (!b) return;
+    if (b.dataset.a === "back") renderTitle();
+    if (b.dataset.a === "wipe") {
+      if ($("#wipeIn").value.trim() === "초기화") { Store.data.learn = {}; Store.data.history = []; Store.save(); toast("지웠어요"); renderParent(); }
+      else toast("'초기화' 라고 정확히 써 주세요");
+    }
+  };
+}
+
+// =====================================================================
+// 새 버전 감지 (패드가 옛 HTML 을 붙들고 있는 문제)
+// =====================================================================
+const Update = { ver: null, last: 0, shown: false };
+async function checkUpdate(force) {
+  if (location.protocol === "file:" || !navigator.onLine) return;
+  const now = Date.now();
+  if (!force && now - Update.last < 60000) return;
+  Update.last = now;
+  try {
+    const r = await fetch(location.pathname + "?v=" + now, { cache: "no-store" });
+    if (r.ok) {
+      const m = /APP_VERSION\s*=\s*"([^"]+)"/.exec(await r.text());
+      if (m && m[1] !== APP_VERSION) Update.ver = m[1];
+    }
+  } catch (e) { return; }
+  if (!Update.ver) return;
+  const f = $("#updFoot");
+  if (f) f.textContent = " → 새 버전 v" + Update.ver;
+  // 판 중에는 방해하지 않는다 — 처음 화면에서만
+  if (!$(".screen-title") && !$("#app.screen-title")) return;
+  if (Update.shown) return;
+  Update.shown = true;
+  const d = layer("modal", `<div class="win-box"><h2>🎁 ${esc(L.updateNew)}</h2>
+    <p>지금 <b>v${esc(APP_VERSION)}</b> 을 쓰고 있어요.<br>새 버전 <b>v${esc(Update.ver)}</b> 으로 바꿔 볼까요?<br><small>하던 판과 학습 기록은 그대로 남아요</small></p>
+    <div class="row"><button class="btn big primary" data-v="go">🔄 새 버전으로 바꾸기</button><button class="btn big" data-v="later">나중에</button></div></div>`);
+  waitPick(d).then((v) => { d.remove(); if (v === "go") applyUpdate(); else renderTitle(); }).catch(() => {});
+}
+function applyUpdate() { location.replace(location.pathname + "?v=" + Date.now()); }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
+window.addEventListener("online", () => checkUpdate(true));
+setInterval(() => checkUpdate(), 10 * 60000);
+
+// ---------- 시험용 손잡이 (?test) ----------
+if (TEST) window.__T = { G, Store, IO, Quiz, startGame, renderTitle, renderSetup, renderParent, R, revealCard, captureScene, kickScene, finishGame, explainVisualHTML };
+
+renderTitle();

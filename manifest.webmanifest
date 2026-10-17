@@ -1,0 +1,13 @@
+{
+  "name": "포켓몬 사다리 대모험",
+  "short_name": "사다리 대모험",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#1d2b53",
+  "theme_color": "#1d2b53",
+  "icons": [
+    { "src": "assets/ui/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "assets/ui/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
