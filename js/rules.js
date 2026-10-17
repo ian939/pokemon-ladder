@@ -235,12 +235,26 @@
    *  o.chute(기본 true) 사다리·미끄럼틀 1회, o.capture(기본 true) 로켓단과 같은 칸이면 포획
    *  → { rode, captured }
    */
+  /** 다른 캐릭터가 서 있는 칸이면 넘어서 한 칸 앞으로 (출발 1번 칸·결승은 같이 있어도 된다) */
+  function occupied(s, pi, n, ignore) {
+    return n > 1 && n < s.goal && s.players.some((q, i) => i !== pi && i !== ignore && q.pos === n);
+  }
+  async function hopOver(s, io, pi, ignore) {
+    const p = s.players[pi];
+    while (occupied(s, pi, p.pos, ignore)) {
+      const over = s.players.findIndex((q, i) => i !== pi && i !== ignore && q.pos === p.pos);
+      p.pos++;
+      await io.show({ type: "hop", who: pi, over, from: p.pos - 1, to: p.pos });
+    }
+  }
+
   async function placePlayer(s, io, pi, to, o) {
     o = o || {};
     const p = s.players[pi];
     const from = p.pos;
     p.pos = clampPlayer(s, to);
     await io.show({ type: "move", who: pi, from, to: p.pos, via: o.via || "card" });
+    await hopOver(s, io, pi, o.ignore);
     if (p.pos >= s.goal) { await win(s, io, pi); return { rode: false, captured: false }; }
     let rode = false;
     if (o.chute !== false) {
@@ -250,6 +264,8 @@
         p.pos = c.to;
         rode = true;
         await io.show({ type: "chute", who: pi, kind: c.kind, from: at, to: c.to });
+        if (p.pos >= s.goal) { await win(s, io, pi); return { rode, captured: false }; }
+        await hopOver(s, io, pi, o.ignore); // 도착 칸에도 누가 있으면 넘는다 (장치는 다시 안 탐)
         if (p.pos >= s.goal) { await win(s, io, pi); return { rode, captured: false }; }
       }
     }
@@ -402,7 +418,7 @@
         const q = s.players[t];
         const a = p.pos, b = q.pos;
         await io.show({ type: "swap", who: pi, target: t });
-        await placePlayer(s, io, pi, b, { via: "swap" });
+        await placePlayer(s, io, pi, b, { via: "swap", ignore: t }); // 맞바꾸는 중엔 넘지 않음
         if (s.winner == null) await placePlayer(s, io, t, a, { via: "swap" });
         break;
       }

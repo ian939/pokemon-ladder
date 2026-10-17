@@ -282,6 +282,13 @@ def main():
             pass
         pg.wait_for_timeout(200)
         check(pg.evaluate("() => window.__rv") == 1, "카드 공개 창 '좋아!' 버튼이 눌림")
+        # 같은 칸이면 넘어서 한 칸 앞으로 (화면)
+        pg.evaluate("""() => { const s = window.__T.G.s; s.players[0].pos = 50; s.players[1].pos = 53; s.force = [3];
+          window.__msgs = []; const o = window.setMsg; window.setMsg = (t) => { window.__msgs.push(t); o(t); };
+          window.__hop = 0; Rules.placePlayer(s, window.__T.IO, 0, 53, { via: 'dice' }).then(() => window.__hop = 1); }""")
+        pg.wait_for_function("() => window.__hop")
+        check(pg.evaluate("() => window.__T.G.s.players[0].pos") == 54, "화면: 친구 칸(53)에 오면 넘어서 54")
+        check(any("엄마를 넘어서 한 칸 앞으로" in m for m in pg.evaluate("() => window.__msgs")), "화면: 넘기 안내 글 (엄마를 넘어서…)")
         pg.close()
 
         # ---------- 4. 이어하기 ----------

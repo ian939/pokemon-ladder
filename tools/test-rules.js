@@ -296,6 +296,42 @@ function game(mode, n) {
     eq(io2.log.filter((e) => e.type === "quiz").length, 1, "퀴즈 칸 턴엔 보너스 건너뜀");
   }
 
+  // --- 같은 칸이면 넘어서 한 칸 앞으로 (2026-10-17 사용자 요청) ---
+  {
+    const s = game(100); s.players[0].pos = 50; s.players[1].pos = 53; s.force = [3];
+    const io = makeIO(); await R.playerTurn(s, io);
+    eq(s.players[0].pos, 54, "53에 친구가 있으면 넘어서 54 (54는 카드 칸)");
+    ok(has(io, "hop"), "넘기 연출");
+    ok(io.log.some((e) => e.type === "cell" && e.cell === "card"), "넘어간 칸(54)의 칸 이벤트");
+  }
+  {
+    const s = game(100, 3); s.players[0].pos = 50; s.players[1].pos = 52; s.players[2].pos = 53; s.force = [2];
+    await R.playerTurn(s, makeIO());
+    eq(s.players[0].pos, 54, "두 명 연달아 있으면 둘 다 넘음 (52·53 → 54)");
+  }
+  {
+    const s = game(100); s.players[0].pos = 10; s.players[1].pos = 12; s.force = [2];
+    await R.playerTurn(s, makeIO());
+    eq(s.players[0].pos, 31, "넘어간 칸이 사다리 시작(13)이면 탐 → 31");
+  }
+  {
+    const s = game(100); s.players[0].pos = 1; s.players[1].pos = 1;
+    eq(s.players.map((p) => p.pos), [1, 1], "출발 칸은 같이 있어도 됨");
+    const s2 = game(100); s2.players[0].pos = 96; s2.players[1].pos = 99; s2.force = [3];
+    await R.step(s2, makeIO());
+    eq(s2.winner, 0, "99의 친구를 넘으면 결승 → 우승");
+  }
+  {
+    const s = game(100); s.players[0].pos = 30; s.players[1].pos = 40;
+    await R.resolveCard(s, makeIO({ choices: { target: 1 } }), 0, "E03", 0);
+    eq([s.players[0].pos, s.players[1].pos], [40, 30], "자리 바꾸기는 넘지 않고 그대로 맞바꿈");
+  }
+  {
+    const s = game(100); s.players[0].pos = 50; s.players[1].pos = 53; s.players[0].ability = ["P04"];
+    await R.useCard(s, makeIO(), 0, "P04");
+    eq([s.players[0].pos, s.players[1].pos], [53, 51], "이상해씨: 상대 53→50(내가 있어 넘어 51), 나 50→53");
+  }
+
   // --- 무작위 판 수천 개: 무한 루프·이상한 값 없음 ---
   for (const mode of [100, 200]) {
     let turns = 0, games = 0;
@@ -310,6 +346,8 @@ function game(mode, n) {
       while (s.winner == null && guard++ < 3000) {
         await R.step(s, io);
         for (const p of s.players) if (p.pos < 1 || p.pos > s.goal || p.ability.length > 2) throw new Error("이상한 값 " + JSON.stringify(p));
+        const ps = s.players.map((p) => p.pos).filter((n) => n > 1 && n < s.goal);
+        if (new Set(ps).size !== ps.length) throw new Error("같은 칸에 두 캐릭터 " + ps);
         if (s.rocket.pos < 1 || s.rocket.pos >= s.goal) throw new Error("로켓단 위치 " + s.rocket.pos);
         io.log.length = 0;
       }

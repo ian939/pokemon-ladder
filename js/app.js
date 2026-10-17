@@ -13,6 +13,11 @@ const QS = new URLSearchParams(location.search);
 const TEST = QS.has("test");
 const TRAINER = Object.fromEntries(R.TRAINERS.map((t) => [t.id, t]));
 const ABORT = new Error("abort");
+/** 받침에 맞는 조사: jo("형", "을", "를") → "형을" */
+function jo(w, a, b) {
+  const c = String(w).charCodeAt(String(w).length - 1);
+  return w + (c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? a : b);
+}
 
 // ---------- 저장 ----------
 const Store = {
@@ -145,12 +150,13 @@ const CAT_NAME = { ability: "능력 카드", rocket: "로켓단 카드", event: 
 
 function cardHTML(id, extra) {
   const c = R.CARDS[id];
-  return `<div class="card cat-${c.cat} ${extra || ""}" data-card="${id}">
+  const long = c.text.length > 15 ? "long" : "";
+  return `<div class="card cat-${c.cat} ${long} ${extra || ""}" data-card="${id}">
     <img class="frame" src="${IMG.frame(c.cat)}" alt="">
     <div class="art"><img src="${IMG.cardIcon(id)}" alt=""></div>
     <div class="cname">${esc(c.name)}</div>
     <div class="ctext">${esc(c.text)}</div>
-    ${c.who ? `<div class="cwho">${esc(c.who)}</div>` : `<div class="cwho">${CAT_NAME[c.cat]}</div>`}
+    ${c.who ? `<div class="cwho">${esc(c.who)}</div>` : ""}
   </div>`;
 }
 function trainerHTML(p, cls) {
@@ -695,6 +701,17 @@ const IO = {
         await animateMove(e.who, e.from, e.to, e.kind);
         renderPanel();
         break;
+      case "hop": {
+        setMsg(`🦘 ${nm(e.who)}: ${jo(nm(e.over), "을", "를")} 넘어서 한 칸 앞으로! (${e.from} → ${e.to})`);
+        say(L.hop);
+        const el = $("#pc" + e.who);
+        if (el) el.classList.add("hopping");
+        await animateMove(e.who, e.from, e.to, "walk");
+        await sleep(250);
+        if (el) el.classList.remove("hopping");
+        renderPanel();
+        break;
+      }
       case "stay":
         setMsg(L.stay); await say(L.stay); await sleep(500); break;
       case "cell": {
