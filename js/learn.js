@@ -11,10 +11,12 @@
   const E = root.EnQ || (typeof require !== "undefined" ? require("./quiz-en.js") : null);
 
   // 레벨별 섞기 (plan §9.2 초기 수학 비중 30/45/25 = 수학 LV.3)
+  // 한 단계 위 레벨은 최대 10% (2026-10-17 사용자 확정 B안)
   const MIX = {
-    math: { 2: { 2: 70, 3: 30 }, 3: { 2: 30, 3: 45, 4: 25 }, 4: { 2: 15, 3: 40, 4: 45 } },
-    en: { 1: { 1: 80, 2: 20 }, 2: { 1: 30, 2: 60, 3: 10 }, 3: { 1: 10, 2: 30, 3: 50, 4: 10 }, 4: { 2: 20, 3: 40, 4: 40 } },
+    math: { 2: { 2: 90, 3: 10 }, 3: { 2: 30, 3: 60, 4: 10 }, 4: { 2: 15, 3: 40, 4: 45 } },
+    en: { 1: { 1: 90, 2: 10 }, 2: { 1: 30, 2: 60, 3: 10 }, 3: { 1: 10, 2: 30, 3: 50, 4: 10 }, 4: { 2: 20, 3: 40, 4: 40 } },
   };
+  const UP_STREAK = 3; // 한 번에 맞히기 3연속이면 한 단계 다시 올림 (설정 레벨까지만)
   const RANGE = { math: [2, 4], en: [1, 4] };
 
   function blank() { return { concepts: {}, recent: { math: [], en: [] }, total: 0, games: 0 }; }
@@ -58,8 +60,10 @@
     opt = opt || {};
     const subj = opt.subject || (player.lastSubj === "math" ? "en" : "math");
     player.lastSubj = subj;
-    const lv = weightedLevel(subj, subj === "math" ? player.math : player.en, bias(rec, subj), r);
-    const weak = weakConcepts(rec, subj);
+    const cur = subj === "math" ? player.math : player.en;
+    const lv = weightedLevel(subj, cur, 0, r);
+    // 약점 복습도 지금 레벨을 넘지 않게
+    const weak = weakConcepts(rec, subj).filter((c) => (subj === "math" ? M.LEVEL[c] <= cur : E.byLevel(Math.min(cur, lv)).includes(c)));
     let concept;
     if (weak.length && r() < 0.3) concept = weak[Math.floor(r() * weak.length)];
     else {
@@ -76,6 +80,29 @@
     const n = q.subject === "math" ? M.similar(q, r) : E.similar(q, r, used);
     if (used) used.add(n.id);
     return n;
+  }
+
+  /**
+   * 레벨 오르내림 (2026-10-17 사용자 요청: 틀리면 레벨 다운)
+   * 한 번에 못 맞히면(힌트·풀이·못 풂) 그 과목 -1, 한 번에 맞히기 3연속이면 +1 (판 시작 때 설정한 레벨까지만).
+   * player.set = { math, en } 은 판 시작 때 설정값. → 바뀌었으면 { subject, from, to } 를 돌려준다
+   */
+  function adjust(player, subject, res) {
+    const [lo] = RANGE[subject];
+    player.set = player.set || { math: player.math, en: player.en };
+    player.streak = player.streak || { math: 0, en: 0 };
+    const from = player[subject];
+    if (res === "first") {
+      player.streak[subject]++;
+      if (player.streak[subject] >= UP_STREAK && from < player.set[subject]) {
+        player[subject] = from + 1;
+        player.streak[subject] = 0;
+      }
+    } else {
+      player.streak[subject] = 0;
+      if (from > lo) player[subject] = from - 1;
+    }
+    return player[subject] !== from ? { subject, from, to: player[subject] } : null;
   }
 
   /** 결과 기록. res: first | hint | explained | fail */
@@ -104,7 +131,7 @@
   }
   function conceptName(c) { return c[0] === "M" ? M.NAMES[c] : E.NAMES[c]; }
 
-  const API = { pick, similar, record, blank, bias, weakList, weakConcepts, conceptName, MIX };
+  const API = { pick, similar, record, adjust, blank, bias, weakList, weakConcepts, conceptName, MIX, UP_STREAK };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else root.Learn = API;
 })(typeof window !== "undefined" ? window : globalThis);

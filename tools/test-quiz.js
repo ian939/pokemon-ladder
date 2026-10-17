@@ -10,6 +10,7 @@ function ok(c, name) {
   if (c) pass++;
   else { fail++; if (!bad[name]) console.log("❌ " + name); bad[name] = (bad[name] || 0) + 1; }
 }
+const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), `${name} (기대 ${JSON.stringify(b)}, 실제 ${JSON.stringify(a)})`);
 function mulberry(seed) {
   return () => {
     let t = (seed = (seed + 0x6d2b79f5) >>> 0);
@@ -132,12 +133,45 @@ for (const c of E.CONCEPTS) ok(per[c] >= 10, `영어 ${c} 문항 10개 이상 ($
   ok(used.size >= 58, `한 판 같은 문항 중복 없음 (${used.size})`);
   // 약점 복습
   const rec2 = L.blank();
-  L.record(rec2, M.make("M23", r), "explained");
-  ok(L.weakConcepts(rec2, "math").includes("M23"), "풀이 본 개념 → 복습 표시");
+  L.record(rec2, M.make("M04", r), "explained");
+  ok(L.weakConcepts(rec2, "math").includes("M04"), "풀이 본 개념 → 복습 표시");
   let hit = 0;
-  for (let i = 0; i < 300; i++) { const q = L.pick({ math: 3, en: 2, lastSubj: "en" }, rec2, null, r); if (q.concept === "M23") hit++; }
+  for (let i = 0; i < 300; i++) { const q = L.pick({ math: 3, en: 2, lastSubj: "en" }, rec2, null, r); if (q.concept === "M04") hit++; }
   ok(hit > 50, `약점 개념 다시 출제 (${hit}/300)`);
   ok(L.weakList(rec2).length === 1, "학습 리포트 약점 목록");
+}
+
+// ---------- 레벨: 위 레벨 10% 이하 · 틀리면 다운 · 3연속이면 업 (2026-10-17 사용자 확정) ----------
+{
+  for (const [subj, sets] of [["math", [2, 3, 4]], ["en", [1, 2, 3, 4]]]) {
+    for (const lv of sets) {
+      const r = mulberry(lv * 7 + subj.length);
+      let above = 0, n = 3000;
+      for (let i = 0; i < n; i++) {
+        const p = { math: subj === "math" ? lv : 3, en: subj === "en" ? lv : 2 };
+        const q = L.pick(p, L.blank(), null, r, { subject: subj });
+        if (q.level > lv) above++;
+      }
+      ok(above / n <= 0.115, `${subj} LV.${lv}: 위 레벨 10% 이하 (${(above / n * 100).toFixed(1)}%)`);
+    }
+  }
+  const p = { math: 3, en: 2 };
+  eq(L.adjust(p, "math", "hint"), { subject: "math", from: 3, to: 2 }, "힌트 보고 맞힘 → 수학 3 → 2");
+  eq(L.adjust(p, "math", "fail"), null, "수학은 LV.2 밑으로 안 내려감");
+  eq(p.math, 2, "수학 LV.2 유지");
+  L.adjust(p, "math", "first"); L.adjust(p, "math", "first");
+  eq(L.adjust(p, "math", "first"), { subject: "math", from: 2, to: 3 }, "한 번에 3연속 → 3으로 다시 올림");
+  for (let i = 0; i < 6; i++) L.adjust(p, "math", "first");
+  eq(p.math, 3, "설정 레벨(3)보다는 안 올라감");
+  eq(L.adjust(p, "en", "explained"), { subject: "en", from: 2, to: 1 }, "영어도 틀리면 2 → 1");
+  eq(L.adjust(p, "en", "fail"), null, "영어는 LV.1 밑으로 안 내려감");
+  // 약점 복습도 지금 레벨을 넘지 않는다
+  const rec = L.blank();
+  L.record(rec, M.make("M23"), "explained");
+  let over = 0;
+  const r = mulberry(99);
+  for (let i = 0; i < 500; i++) { const q = L.pick({ math: 2, en: 2, lastSubj: "en" }, rec, null, r); if (q.level > 3) over++; }
+  eq(over, 0, "수학 LV.2 이면 LV.4 곱셈 복습은 안 나옴");
 }
 
 console.log(`\n통과 ${pass} · 실패 ${fail}`);

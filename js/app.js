@@ -1341,6 +1341,13 @@ const Quiz = {
     d.remove();
     // 기록
     Learn.record(rec, q, res);
+    const lvChange = Learn.adjust(p, q.subject, res);
+    if (lvChange) {
+      const subj = lvChange.subject === "math" ? "수학" : "영어";
+      if (lvChange.to < lvChange.from) setMsg(`🌱 ${subj} LV.${lvChange.from} → LV.${lvChange.to} · 다음엔 조금 쉬운 문제로 연습해요!`);
+      else setMsg(`🚀 ${subj} LV.${lvChange.from} → LV.${lvChange.to} · 세 번 연속 정답! 다시 도전해요!`);
+      toast(`${subj} LV.${lvChange.to}`, 1600);
+    }
     p.qs.n++; p.qs[res]++; p.qs[q.subject]++;
     p.qs.weak = p.qs.weak || {};
     if (res !== "first") p.qs.weak[q.concept] = (p.qs.weak[q.concept] || 0) + 1;

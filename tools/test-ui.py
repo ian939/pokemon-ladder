@@ -258,6 +258,8 @@ def main():
         check(pg.evaluate("() => window.__qres") == "explained", "풀이 후 정답 = 'explained' 기록")
         rec = pg.evaluate("() => window.__T.Store.data.learn['지온이'].concepts.M23")
         check(rec["explained"] == 1 and rec["needReview"], "학습 기록: 곱셈 묶음 복습 필요")
+        lv = pg.evaluate("() => [window.__T.G.s.players[0].math, document.querySelector('#msgText').textContent]")
+        check(lv[0] == 2 and "LV.3 → LV.2" in lv[1], f"틀리면 레벨 다운: 수학 LV.3 → LV.2 + 안내 ({lv})")
 
         # 듣기 다시 재생 여러 번 · 문장 배열 되돌리기
         pg.evaluate("() => { Learn.pick = (pl, rec, used, r) => EnQ.make('E18', r, null); window.__qres = null; window.__T.Quiz.run(0, { reason: 'bonus' }).then(r => window.__qres = r); }")
