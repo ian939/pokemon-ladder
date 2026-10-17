@@ -35,7 +35,7 @@ const pct = (arr, p) => arr.slice().sort((a, b) => a - b)[Math.floor(arr.length 
 (async () => {
   for (const mode of [100]) { // 200칸은 숨김
     for (const np of [1, 2, 3, 4]) {
-      const rounds = [], quizPP = [], caps = [], firstWin = [0, 0];
+      const rounds = [], quizPP = [], caps = [], firstWin = [0, 0]; let rocketWon = 0;
       for (let g = 0; g < N; g++) {
         const players = R.TRAINERS.slice(0, np).map((t) => ({ name: t.name, trainer: t.id }));
         const s = R.createGame({ mode, seed: g * 7919 + np, players });
@@ -44,12 +44,12 @@ const pct = (arr, p) => arr.slice().sort((a, b) => a - b)[Math.floor(arr.length 
         rounds.push(s.round);
         quizPP.push(s.quizzes / np);
         caps.push(s.captures);
-        firstWin[s.winner === 0 ? 0 : 1]++;
+        firstWin[s.winner === 0 ? 0 : 1]++; if (s.rocketWon) rocketWon++;
       }
       const avg = (a) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1);
       // 시간 어림: 사람 한 차례 약 15초 + 퀴즈 1문제 약 40초 + 로켓단 차례 약 6초
       const mins = (+avg(rounds) * (np * 15 + 6) + +avg(quizPP) * np * 40) / 60; // v2: 차례 안내를 기다리지 않음 (한 차례 약 15초)
-      console.log(`${mode}칸 ${np}명: 라운드 평균 ${avg(rounds)} (10%~90%: ${pct(rounds, 0.1)}~${pct(rounds, 0.9)}) · 1인 퀴즈 ${avg(quizPP)}문제 · 포획 ${avg(caps)}번/판 · 1P 승률 ${(firstWin[0] / N * 100).toFixed(0)}% · 예상 ${mins.toFixed(0)}분`);
+      console.log(`${mode}칸 ${np}명: 라운드 평균 ${avg(rounds)} (10%~90%: ${pct(rounds, 0.1)}~${pct(rounds, 0.9)}) · 1인 퀴즈 ${avg(quizPP)}문제 · 포획 ${avg(caps)}번/판 · 1P 승률 ${(firstWin[0] / N * 100).toFixed(0)}% · 로켓단 도착 ${(rocketWon / N * 100).toFixed(0)}% · 예상 ${mins.toFixed(0)}분`);
     }
   }
 })();

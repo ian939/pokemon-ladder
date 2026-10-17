@@ -63,7 +63,7 @@
     R04: { cat: "rocket", keep: "now", icon: 3, name: "로켓단 후퇴", text: "로켓단 10칸 뒤로" },
     R05: { cat: "rocket", keep: "now", icon: 4, name: "로켓단 휴식", text: "로켓단 다음 턴은 쉬어요" },
     R06: { cat: "rocket", keep: "now", icon: 5, name: "로켓단 소환", text: "로켓단이 가장 가까운 로켓단 칸으로" },
-    R07: { cat: "rocket", keep: "now", icon: 6, name: "방향 전환", text: "로켓단 다음 이동은 반대 방향" },
+    R07: { cat: "rocket", keep: "now", icon: 6, name: "방향 전환", text: "로켓단이 다음 차례에 뒤로 달려요" },
     R08: { cat: "rocket", keep: "held", icon: 7, name: "로켓단 탈출", text: "잡힐 때 1번 쏙 빠져나가요", react: true },
 
     E01: { cat: "event", keep: "held", icon: 0, name: "한 번 더!", text: "돌림판을 돌린 뒤 한 번 더 돌릴 수 있어요" },
@@ -168,9 +168,9 @@
     const map = MAPS[opts.mode];
     const s = {
       v: 1, mode: opts.mode, goal: map.goal, rng: (opts.seed >>> 0) || 1,
-      round: 1, turn: 0, phase: "players", winner: null, quizzes: 0, captures: 0, solo: opts.players.length === 1,
+      round: 1, turn: 0, phase: "players", winner: null, rocketWon: false, quizzes: 0, captures: 0, solo: opts.players.length === 1,
       players: opts.players.map((p) => ({
-        name: p.name, trainer: p.trainer, adult: !!p.adult,
+        name: p.name, trainer: p.trainer, adult: !!p.adult, cpu: !!p.cpu,
         math: p.math || 3, en: p.en || 2,
         pos: 1, turns: 0, ability: [], held: null,
         st: { minus6: false, minus2: false, skip: false, safe: false },
@@ -302,8 +302,14 @@
     o = o || {};
     const r = s.rocket;
     const from = r.pos;
-    r.pos = clampRocket(s, r.pos + delta);
+    if (r.pos + delta > s.goal) {
+      // 로켓단도 딱 맞아야 도착 (넘치면 그 자리)
+      await io.show({ type: "rocket-over", need: s.goal - from, want: delta });
+      return [];
+    }
+    r.pos = Math.max(1, r.pos + delta);
     await io.show({ type: "rocket-move", from, to: r.pos, via: o.via || "card" });
+    if (r.pos >= s.goal) { await rocketWins(s, io); return []; }
     const c = chuteAt(mapOf(s), r.pos);
     if (c) {
       const at = r.pos;
@@ -313,6 +319,12 @@
     const hit = s.players.map((p, i) => (p.pos === r.pos ? i : -1)).filter((i) => i >= 0);
     if (hit.length) await captureGroup(s, io, hit);
     return hit;
+  }
+  /** 로켓단이 먼저 100칸에 도착 → 모두 진다 (승자 없음, 2026-10-17 사용자 요청) */
+  async function rocketWins(s, io) {
+    s.winner = -1;
+    s.rocketWon = true;
+    await io.show({ type: "rocket-win" });
   }
   /** 로켓단 순간 등장(급습·소환·재합류·튕겨내기): 장치·포획 없음 */
   async function teleportRocket(s, io, to, why) {
@@ -678,9 +690,10 @@
       r.skip = false;
       await io.show({ type: "rocket-rest" });
     } else {
+      // 로켓단은 앞으로만 달린다 (2026-10-17 사용자 요청) — 방향 전환 카드를 맞았을 때만 한 번 뒤로
       const t = rocketTarget(s);
-      let dir = s.players[t].pos >= r.pos ? 1 : -1;
-      if (r.reverse) { dir = -dir; r.reverse = false; }
+      let dir = 1;
+      if (r.reverse) { dir = -1; r.reverse = false; }
       const rolls = r.double ? [rocketSpin(s), rocketSpin(s)] : [rocketSpin(s)];
       r.double = false;
       s.lastRocket = { target: t, dir, rolls };
@@ -701,6 +714,7 @@
       else s.phase = "rocket";
     } else {
       await rocketTurn(s, io);
+      if (s.winner != null) return;
       s.phase = "players";
       s.turn = 0;
       s.round++;

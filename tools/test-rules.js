@@ -250,10 +250,25 @@ function game(mode, n) {
     eq(R.rocketTarget(s), 1, "동률이면 칸 번호 큰 사람");
     s.players[0].pos = 48; eq(R.rocketTarget(s), 0, "가장 가까운 사람");
   }
-  // 로켓단은 결승 못 넘음
+  // 로켓단은 앞으로만 · 먼저 도착하면 모두 진다 (2026-10-17 사용자 요청)
   {
-    const s = game(100); s.rocket.pos = 97; s.players[0].pos = 98; s.players[1].pos = 98; s.force = [6];
-    await R.rocketTurn(s, makeIO()); ok(s.rocket.pos <= 99, "로켓단은 99번까지");
+    const s = game(100); s.rocket.pos = 50; s.players[0].pos = 30; s.players[1].pos = 40; s.force = [3];
+    await R.rocketTurn(s, makeIO()); eq(s.rocket.pos, 53, "사람이 뒤에 있어도 로켓단은 앞으로");
+    const s2 = game(100); s2.rocket.pos = 97; s2.players[0].pos = 30; s2.players[1].pos = 40; s2.force = [6];
+    const io2 = makeIO(); await R.rocketTurn(s2, io2);
+    eq([s2.rocket.pos, s2.winner], [97, null], "로켓단도 넘치면 그 자리");
+    ok(has(io2, "rocket-over"), "로켓단 넘침 안내");
+    const s3 = game(100); s3.rocket.pos = 96; s3.players[0].pos = 30; s3.players[1].pos = 40; s3.force = [4];
+    const io3 = makeIO(); await R.step(Object.assign(s3, { phase: "rocket" }), io3);
+    eq([s3.winner, s3.rocketWon], [-1, true], "로켓단이 딱 100 → 모두 짐 (승자 없음)");
+    ok(has(io3, "rocket-win"), "로켓단 도착 연출");
+    let before = 0, fwd = 0;
+    for (let i = 0; i < 500; i++) {
+      const t = game(100); t.rng = i + 9; t.rocket.pos = 40; t.players[0].pos = 10; t.players[1].pos = 20;
+      before = t.rocket.pos; await R.rocketTurn(t, makeIO({ quiz: ["first"] }));
+      if (t.rocket.pos > before || t.rocket.pos < before - 8) fwd++;
+    }
+    eq(fwd, 500, "로켓단 돌림판 이동은 늘 앞으로 (미끄럼틀·튕겨내기 빼고)");
   }
   // 결승은 딱 맞아야 (2026-10-17 사용자 요청)
   {
@@ -375,9 +390,9 @@ function game(mode, n) {
       const tio = makeIO(); tio.quiz = async () => "first";
       let guard = 0;
       while (t.winner == null && guard++ < 2000) { await R.step(t, tio); tio.log.length = 0; }
-      if (t.winner === 0 && t.players[0].pos === 100) done++;
+      if ((t.winner === 0 && t.players[0].pos === 100) || (t.rocketWon && t.rocket.pos === 100)) done++;
     }
-    eq(done, 300, "혼자하기 300판 모두 딱 100 골인으로 끝남");
+    eq(done, 300, "혼자하기 300판 모두 끝남 (딱 100 골인 또는 로켓단 도착)");
   }
 
   // --- 무작위 판 수천 개: 무한 루프·이상한 값 없음 ---
@@ -396,7 +411,7 @@ function game(mode, n) {
         for (const p of s.players) if (p.pos < 1 || p.pos > s.goal || p.ability.length > 2) throw new Error("이상한 값 " + JSON.stringify(p));
         const ps = s.players.map((p) => p.pos).filter((n) => n > 1 && n < s.goal);
         if (new Set(ps).size !== ps.length) throw new Error("같은 칸에 두 캐릭터 " + ps);
-        if (s.rocket.pos < 1 || s.rocket.pos >= s.goal) throw new Error("로켓단 위치 " + s.rocket.pos);
+        if (s.rocket.pos < 1 || s.rocket.pos > s.goal || (s.rocket.pos === s.goal && !s.rocketWon)) throw new Error("로켓단 위치 " + s.rocket.pos);
         io.log.length = 0;
       }
       ok(s.winner != null, `${mode}칸 판 ${g} 끝남`);

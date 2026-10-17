@@ -276,6 +276,7 @@ const DEFAULT_SETUP = {
 function renderSetup() {
   const st = JSON.parse(JSON.stringify(Store.data.setup || DEFAULT_SETUP));
   if (!SHOW_200) st.mode = 100; // 200칸은 지금 숨김 (2026-10-17 사용자 요청: 100칸만 오픈)
+  st.cpus = (st.cpus || []).filter((id) => TRAINER[id]);
   const draw = () => {
     const solo = st.players.length === 1;
     const taken = st.players.map((p) => p.trainer);
@@ -283,8 +284,8 @@ function renderSetup() {
     <div class="setup">
       <header class="bar"><button class="btn" data-a="back">◀ 처음</button><h2>새 모험 준비</h2><span></span></header>
       <section class="win-box modes">
-        <button class="mode ${solo ? "on" : ""}" data-a="solo" data-v="1"><b>👤 혼자 하기</b><small>로켓단을 피해 100칸 골인!</small></button>
-        <button class="mode ${solo ? "" : "on"}" data-a="solo" data-v="0"><b>👥 같이 하기</b><small>2~4명 · 먼저 100칸 골인!</small></button>
+        <button class="mode ${solo ? "on" : ""}" data-a="solo" data-v="1"><b>👤 혼자 하기</b><small>컴퓨터 친구 0~3명 · 로켓단보다 먼저 골인!</small></button>
+        <button class="mode ${solo ? "" : "on"}" data-a="solo" data-v="0"><b>👥 같이 하기</b><small>2~4명 · 로켓단보다 먼저 골인!</small></button>
         ${SHOW_200 ? `<button class="mode ${st.mode === 200 ? "on" : ""}" data-a="mode" data-v="${st.mode === 200 ? 100 : 200}"><b>${st.mode === 200 ? "200칸" : "100칸"}</b><small>눌러서 바꾸기</small></button>` : ""}
       </section>
       <section class="players">
@@ -307,6 +308,11 @@ function renderSetup() {
           </div>
         </div>`).join("")}
         ${st.players.length < 4 && st.players.length > 1 ? `<button class="win-box add" data-a="add">➕ 한 명 더</button>` : ""}
+        ${solo ? `<div class="win-box cpu-box">
+          <div class="cpu-title">🤖 같이 달릴 컴퓨터 친구 <small>(0~3명 · 안 고르면 로켓단과 둘이서)</small></div>
+          <div class="pl-trainers">${R.TRAINERS.filter((t) => t.id !== st.players[0].trainer).map((t) => `<button class="tpick ${st.cpus.includes(t.id) ? "on" : ""}" data-a="cpu" data-v="${t.id}" ${!st.cpus.includes(t.id) && st.cpus.length >= 3 ? "disabled" : ""}>
+            <img src="${IMG.trainer(t.id)}" alt=""><img class="tp-poke" src="${IMG.poke(t.partner)}" alt=""><span>${esc(t.name)}</span></button>`).join("")}</div>
+        </div>` : ""}
       </section>
       <footer class="setup-go"><button class="btn big primary" data-a="go">🚀 모험 출발!</button></footer>
     </div>`, "screen-setup");
@@ -327,7 +333,11 @@ function renderSetup() {
         else { const free = R.TRAINERS.find((t) => t.id !== st.players[0].trainer); st.players.push({ name: st.players[0].name === "엄마" ? "아빠" : "엄마", trainer: free.id, adult: true, math: 4, en: 4 }); }
       }
     }
-    if (a === "tr") st.players[i].trainer = b.dataset.v;
+    if (a === "tr") { st.players[i].trainer = b.dataset.v; st.cpus = st.cpus.filter((id) => id !== b.dataset.v); }
+    if (a === "cpu") {
+      const id = b.dataset.v;
+      st.cpus = st.cpus.includes(id) ? st.cpus.filter((x) => x !== id) : st.cpus.concat(id).slice(0, 3);
+    }
     if (a === "adult") {
       const ad = b.dataset.v === "1";
       st.players[i].adult = ad;
@@ -392,6 +402,10 @@ const G = {
 
 function startGame(setup) {
   if (!SHOW_200) setup = Object.assign({}, setup, { mode: 100 });
+  // 혼자하기 + 컴퓨터 친구 (관장들) 최대 3명
+  if (setup.players.length === 1 && (setup.cpus || []).length) {
+    setup = Object.assign({}, setup, { players: setup.players.concat(setup.cpus.slice(0, 3).map((id) => ({ name: TRAINER[id].name, trainer: id, cpu: true, adult: true, math: 4, en: 4 }))) });
+  }
   const seed = QS.has("seed") ? +QS.get("seed") : (Date.now() ^ (Math.random() * 1e9)) >>> 0;
   const s = R.createGame({ mode: setup.mode, seed, players: setup.players });
   s.players.forEach((p) => { p.qs = { n: 0, first: 0, hint: 0, explained: 0, fail: 0, math: 0, en: 0 }; p.lastSubj = p.adult ? "en" : "math"; });
@@ -696,7 +710,7 @@ function renderPanel(opt) {
     const dg = R.danger(s, i);
     const n = p.ability.length + (p.held ? 1 : 0);
     return `<li class="${i === G.current && !rocketPhase ? "now" : ""} dg-${dg}" style="--pc:${TRAINER[p.trainer].color}">
-        ${trainerHTML(p, "sm")}<span class="pname">${esc(p.name)}<i class="pst">${p.st.skip ? "💤" : ""}${p.st.minus6 ? "🐌-6" : ""}${p.st.minus2 ? "🚧-2" : ""}${p.st.safe ? "🛡️" : ""}${n ? "🃏" + n : ""}${dg === "danger" ? " 🚨" : dg === "caution" ? " ⚠️" : ""}</i></span><b class="ppos">${p.pos}</b>
+        ${trainerHTML(p, "sm")}<span class="pname">${p.cpu ? "🤖 " : ""}${esc(p.name)}<i class="pst">${p.st.skip ? "💤" : ""}${p.st.minus6 ? "🐌-6" : ""}${p.st.minus2 ? "🚧-2" : ""}${p.st.safe ? "🛡️" : ""}${n ? "🃏" + n : ""}${dg === "danger" ? " 🚨" : dg === "caution" ? " ⚠️" : ""}</i></span><b class="ppos">${p.pos}</b>
       </li>`;
   }).join("") + `<li class="rocket-row">${rocketHTML()}<span class="pname">로켓단<i class="pst">${s.rocket.skip ? "💤" : ""}${s.rocket.double ? "🔥×2" : ""}${s.rocket.reverse ? "🔄" : ""}</i></span><b class="ppos">${s.rocket.pos}</b></li>`;
   const hud = $("#hud");
@@ -790,7 +804,7 @@ const Wheel = {
   },
 };
 function wheelBadge(p) {
-  return `${trainerHTML(p, "big")}<div><b>${esc(p.name)}</b><span>차례!</span></div>`;
+  return `${trainerHTML(p, "big")}<div><b>${esc(p.name)}</b><span>${p.cpu ? "🤖 컴퓨터 차례" : "차례!"}</span></div>`;
 }
 function rocketBadge() {
   return `${rocketHTML()}<div><b>로켓단</b><span>차례다옹!</span></div>`;
@@ -961,11 +975,24 @@ const IO = {
         await spinShow(e.dice, true);
         Wheel.hide();
         renderPanel();
-        setMsg(`👿 ${e.dice.join(" + ")}! ${nm(e.target)} 쪽으로 ${e.dir > 0 ? "앞으로" : "뒤로"} 쫓아간다옹!`);
-        $("#pc" + e.target) && $("#pc" + e.target).classList.add("target");
+        setMsg(e.dir > 0 ? `👿 ${e.dice.map((v) => WORDS[v]).join(" + ")}! 로켓단이 앞으로 달린다옹!` : `🔄 방향 전환! 로켓단이 뒤로 간다옹~`);
         say(L.rocketChase);
-        $("#pc" + e.target) && $("#pc" + e.target).classList.remove("target");
         break;
+      case "rocket-over":
+        setMsg(`👿 로켓단도 딱 맞아야 도착! ${e.want}칸은 넘쳐서 그 자리다옹.`);
+        say(L.rocketOver);
+        await sleep(700);
+        break;
+      case "rocket-win": {
+        SFX.alarm();
+        const d = layer("capture-scene rocket-win", `<div class="cap-bg"></div><div class="cap-rocket">${rocketHTML()}</div>
+          <div class="cap-line win-box"><span>🏁 ${esc(L.rocketWin)}</span></div>`);
+        setMsg(`🏁 ${L.rocketWin}`);
+        say(L.rocketWin);
+        await sleep(2400);
+        d.remove();
+        break;
+      }
       case "rocket-move":
         await animateMove("R", e.from, e.to, e.via === "dice" || Math.abs(e.to - e.from) <= 12 ? "walk" : "warp");
         renderPanel();
@@ -1000,6 +1027,7 @@ const IO = {
     const s = G.s;
     const P = (i) => s.players[i];
     if (TEST && window.__T && window.__T.auto && kind !== "action") return window.__T.auto(kind, data);
+    if (data && data.who != null && P(data.who) && P(data.who).cpu) return cpuChoose(kind, data);
     switch (kind) {
       case "action": return chooseAction(data);
       case "spin": return chooseSpin(data);
@@ -1065,6 +1093,7 @@ const IO = {
   async quiz(pi, ctx) {
     if (G.aborted) throw ABORT;
     if (TEST && window.__T && window.__T.autoQuiz) return window.__T.autoQuiz(pi, ctx);
+    if (G.s.players[pi].cpu) return cpuQuiz(pi, ctx);
     return Quiz.run(pi, ctx);
   },
 };
@@ -1100,6 +1129,65 @@ function chooseAction(data) {
     if (TEST && window.__T && window.__T.auto) setTimeout(() => done(window.__T.auto("action", data)), 0);
   });
 }
+// ---------- 컴퓨터 친구 (혼자하기에서 고르는 관장들, 2026-10-17 사용자 요청) ----------
+/** 컴퓨터가 고른다 — 아이가 무슨 일인지 볼 수 있게 잠깐씩 멈춘다 */
+async function cpuChoose(kind, d) {
+  const s = G.s, me = s.players[d.who], map = R.MAPS[s.mode];
+  const lead = (opts) => opts.slice().sort((a, b) => s.players[b].pos - s.players[a].pos)[0];
+  if (kind === "action") {
+    Wheel.show(12, wheelBadge(me), false);
+    setMsg(`🤖 ${jo(me.name, "이", "가")} 생각 중…`);
+    await sleep(800);
+    const u = d.cards.filter((c) => c.ok);
+    if (u.length && Math.random() < 0.5) return u[Math.floor(Math.random() * u.length)].id;
+    setMsg(`🤖 ${jo(me.name, "이", "가")} 돌림판을 돌려요!`);
+    $("#rollBtn") && $("#rollBtn").classList.add("cpu-press");
+    await sleep(350);
+    $("#rollBtn") && $("#rollBtn").classList.remove("cpu-press");
+    return "roll";
+  }
+  if (kind === "spin") { Wheel.show(12, wheelBadge(me), false); await sleep(600); return true; }
+  await sleep(500);
+  switch (kind) {
+    case "target": return lead(d.options);
+    case "direction": return d.target != null ? 1 : -1; // 로켓단은 뒤로 보내고, 급습은 앞사람 앞에
+    case "cell": {
+      let best = d.to;
+      for (let n = d.to; n >= d.from; n--) if (map.ladders[n]) { best = n; break; }
+      while (map.slides[best] && best > d.from) best--;
+      return best;
+    }
+    case "pick": return 0;
+    case "discard": return d.add;
+    case "reward": return "move";
+    case "reroll": return d.dice.reduce((a, b) => a + b, 0) < 5;
+    case "lucky": {
+      const room = s.goal - me.pos;
+      for (let v = Math.min(12, room); v >= 1; v--) if (map.ladders[me.pos + v]) return v;
+      for (let v = Math.min(12, room); v >= 1; v--) if (!map.slides[me.pos + v]) return v;
+      return 1;
+    }
+    case "defend": return d.options[0];
+  }
+  return null;
+}
+/** 컴퓨터는 퀴즈를 확률로 푼다 (아이 학습 기록에는 안 넣는다) */
+async function cpuQuiz(pi, ctx) {
+  const p = G.s.players[pi];
+  const x = Math.random();
+  const res = x < 0.55 ? "first" : x < 0.75 ? "hint" : x < 0.9 ? "explained" : "fail";
+  const d = layer("cpu-quiz", `<div class="win-box">${trainerHTML(p, "big")}<div><b>🤖 ${jo(p.name, "이", "가")} 문제를 풀고 있어요…</b><span id="cpuRes">🤔</span></div></div>`);
+  await sleep(1100);
+  $("#cpuRes", d).textContent = res === "first" ? "🌟 한 번에 정답!" : res === "hint" ? "💡 힌트 보고 정답!" : res === "explained" ? "📖 풀이 보고 맞혔어요" : "😢 아쉬워요!";
+  res === "first" || res === "hint" ? SFX.good() : SFX.bad();
+  await sleep(900);
+  d.remove();
+  p.qs = p.qs || { n: 0, first: 0, hint: 0, explained: 0, fail: 0, math: 0, en: 0 };
+  p.qs.n++; p.qs[res]++;
+  void ctx;
+  return res;
+}
+
 /** 카드를 쓴 뒤 돌림판 누르기 */
 function chooseSpin(data) {
   return new Promise((resolve, reject) => {
@@ -1443,30 +1531,31 @@ function placeHTML(v) {
 // 결과
 // =====================================================================
 async function finishGame(s) {
-  const w = s.players[s.winner];
-  SFX.win();
-  say(w.name, L.win);
+  const lost = !!s.rocketWon; // 로켓단이 먼저 도착 → 모두 진다
+  const w = lost ? null : s.players[s.winner];
+  if (lost) { SFX.bad(); say(L.rocketWin); } else { SFX.win(); say(w.name, L.win); }
   const rank = s.players.map((p, i) => ({ p, i })).sort((a, b) => (a.i === s.winner ? -1 : b.i === s.winner ? 1 : b.p.pos - a.p.pos));
   // 기록 (한 판 요약)
-  Store.data.history.unshift({ at: Date.now(), mode: s.mode, rounds: s.round, winner: w.name, mins: Math.round((Date.now() - (s.started || Date.now())) / 60000),
+  Store.data.history.unshift({ at: Date.now(), mode: s.mode, rounds: s.round, winner: lost ? "로켓단 (모두 짐)" : w.name, mins: Math.round((Date.now() - (s.started || Date.now())) / 60000),
     players: s.players.map((p) => ({ name: p.name, pos: p.pos, qs: p.qs })) });
   Store.data.history = Store.data.history.slice(0, 30);
   s.players.forEach((p) => { const r = Store.data.learn[p.name]; if (r) r.games = (r.games || 0) + 1; });
   Store.data.game = null;
   Store.save();
-  const medal = ["🥇", "🥈", "🥉", "🎖️"];
+  const medal = lost ? ["🏃", "🏃", "🏃", "🏃"] : ["🥇", "🥈", "🥉", "🎖️"];
   show(`
   <div class="result">
-    <div class="podium">
+    <div class="podium ${lost ? "lost" : ""}">
       <div class="win-bg"></div>
-      <div class="champ">${trainerHTML(w, "huge")}<h1>${esc(w.name)} ${s.solo ? "골인!" : "우승!"}</h1><p>${s.mode}칸 · ${s.round}라운드 · 퀴즈 ${s.quizzes}문제 · 로켓단 포획 ${s.captures}번</p></div>
+      ${lost ? `<div class="champ"><span class="rk huge-rk">${rocketHTML()}</span><h1>로켓단이 먼저 도착…</h1><p>이번엔 승자가 없어요. 다시 도전해서 로켓단보다 먼저 골인해요! · ${s.round}라운드</p></div>`
+        : `<div class="champ">${trainerHTML(w, "huge")}<h1>${esc(w.name)} ${s.players.length === 1 ? "골인!" : "우승!"}</h1><p>${s.mode}칸 · ${s.round}라운드 · 퀴즈 ${s.quizzes}문제 · 로켓단 포획 ${s.captures}번</p></div>`}
     </div>
     <div class="res-list">
       ${rank.map(({ p }, k) => {
         const q = p.qs || { n: 0 };
         const weak = Object.keys(q.weak || {}).slice(0, 3).map((c) => Learn.conceptName(c));
         return `<div class="win-box res-row" style="--pc:${TRAINER[p.trainer].color}">
-          <span class="medal">${medal[k]}</span>${trainerHTML(p, "sm")}<b>${esc(p.name)}</b><span class="rpos">${p.pos}칸</span>
+          <span class="medal">${medal[k]}</span>${trainerHTML(p, "sm")}<b>${p.cpu ? "🤖 " : ""}${esc(p.name)}</b><span class="rpos">${p.pos}칸</span>
           <span class="rq">📝 ${q.n}문제 (수학 ${q.math || 0} · 영어 ${q.en || 0}) · 🌟 바로 ${q.first || 0} · 💡 힌트 ${q.hint || 0} · ⭐ 도장 ${q.explained || 0}</span>
           ${weak.length ? `<span class="rweak">다음에 복습: ${weak.map(esc).join(", ")}</span>` : ""}
         </div>`;
