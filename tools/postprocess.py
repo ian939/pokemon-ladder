@@ -172,7 +172,26 @@ def app_icons():
     print("앱 아이콘")
 
 
+def board_materials():
+    """v2 판 재료: 흙길 타일 · 덤불 띠 · 나무/돌 블록 (2026-10-17 실물 보드게임 느낌으로)"""
+    b = A / "board"
+    im = Image.open(GEN / "lane-dirt.png").convert("RGB").resize((192, 192), Image.LANCZOS)
+    im.save(b / "lane-dirt.webp", "WEBP", quality=82, method=6)
+    im = Image.open(GEN / "hedge.png").convert("RGB")
+    h = 96
+    im = im.resize((round(im.width * h / im.height), h), Image.LANCZOS)
+    im.save(b / "hedge.webp", "WEBP", quality=82, method=6)
+    for k in ("wood", "stone"):
+        im = fit(trim(remove_white(Image.open(GEN / f"block-{k}.png"))), 128)
+        im = trim(im)
+        im.save(b / f"block-{k}.png", optimize=True)
+    print("판 재료 4장")
+
+
 def main():
+    if "--board" in sys.argv:
+        board_materials()
+        return
     (A / "board").mkdir(parents=True, exist_ok=True)
     (A / "icons").mkdir(parents=True, exist_ok=True)
     for r in ("town", "forest", "ice", "champion"):
@@ -186,6 +205,7 @@ def main():
     slide_segment()
     frames()
     app_icons()
+    board_materials()
 
 
 if __name__ == "__main__":

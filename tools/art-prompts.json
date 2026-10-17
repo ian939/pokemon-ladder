@@ -1,41 +1,173 @@
 {
-  "styles": {
-    "pixel": "Style: 2D pixel art like the overworld maps of classic 2000s handheld monster-collecting RPGs, limited bright palette, crisp dark 1-pixel outlines, soft cheerful colors, flat even lighting, clean readable shapes. No text, no letters, no numbers, no creatures, no animals, no people, no characters.",
-    "item": "Style: crisp pixel art item icons like the bag item sprites of classic 2000s handheld monster-collecting RPGs, chunky readable shapes, bright cheerful palette, dark 1-pixel outline, simple two-tone shading. No text, no letters, no numbers, no creatures, no animals, no people, no characters."
+ "styles": {
+  "pixel": "Style: 2D pixel art like the overworld maps of classic 2000s handheld monster-collecting RPGs, limited bright palette, crisp dark 1-pixel outlines, soft cheerful colors, flat even lighting, clean readable shapes. No text, no letters, no numbers, no creatures, no animals, no people, no characters.",
+  "item": "Style: crisp pixel art item icons like the bag item sprites of classic 2000s handheld monster-collecting RPGs, chunky readable shapes, bright cheerful palette, dark 1-pixel outline, simple two-tone shading. No text, no letters, no numbers, no creatures, no animals, no people, no characters."
+ },
+ "items": [
+  {
+   "id": "region-town",
+   "phase": 1,
+   "tone": "pixel",
+   "prompt": "A wide landscape image with a 2:1 aspect ratio: a top-down pixel art game map of a peaceful starting village meadow used as the floor of a board game. Even short bright green grass fills the whole image with a subtle checkered grass-tile texture, tiny flower patches and small pebbles spread evenly, a few small red-roofed cottages, round trees and fences only along the very left and right edges. The middle area stays open, flat and low-contrast so that number tiles can be placed on top. No big objects in the middle, no path, no border frame."
   },
-  "items": [
-    {"id": "region-town", "phase": 1, "tone": "pixel",
-     "prompt": "A wide landscape image with a 2:1 aspect ratio: a top-down pixel art game map of a peaceful starting village meadow used as the floor of a board game. Even short bright green grass fills the whole image with a subtle checkered grass-tile texture, tiny flower patches and small pebbles spread evenly, a few small red-roofed cottages, round trees and fences only along the very left and right edges. The middle area stays open, flat and low-contrast so that number tiles can be placed on top. No big objects in the middle, no path, no border frame."},
-    {"id": "region-forest", "phase": 1, "tone": "pixel",
-     "prompt": "A wide landscape image with a 2:1 aspect ratio: a top-down pixel art game map of a deep green forest clearing used as the floor of a board game. Darker mossy green grass with a subtle checkered tile texture fills the whole image, small mushrooms, ferns, fallen leaves and tiny bushes spread evenly, dense round pine and oak tree canopies only along the very left and right edges. The middle area stays open, flat and low-contrast so that number tiles can be placed on top. No big objects in the middle, no path, no border frame."},
-    {"id": "region-ice", "phase": 1, "tone": "pixel",
-     "prompt": "A wide landscape image with a 2:1 aspect ratio: a top-down pixel art game map of the floor of a sparkling ice cave used as the floor of a board game. Pale icy blue and white frozen ground with a subtle checkered ice-tile texture fills the whole image, tiny snow drifts, small cracks and little sparkles spread evenly, light blue ice crystal clusters and rocky cave walls only along the very left and right edges. The middle area stays open, flat and low-contrast so that number tiles can be placed on top. No big objects in the middle, no path, no border frame."},
-    {"id": "region-champion", "phase": 1, "tone": "pixel",
-     "prompt": "A wide landscape image with a 2:1 aspect ratio: a top-down pixel art game map of a rocky mountain road near a champion's stadium used as the floor of a board game. Warm sandy-brown rocky ground with a subtle checkered stone-tile texture fills the whole image, tiny pebbles and small tufts of dry grass spread evenly, large boulders, cliffs and a few red and gold banner flags only along the very left and right edges. The middle area stays open, flat and low-contrast so that number tiles can be placed on top. No big objects in the middle, no path, no border frame."},
-    {"id": "title-bg", "phase": 1, "tone": "pixel",
-     "prompt": "A wide 16:9 pixel art title screen background for a cheerful board game adventure: a sunny sky with fluffy clouds, green rolling hills built as stepped terraces, tall wooden ladders leaning between the terraces and bright orange playground slides curving down from them, a small golden trophy shining on the highest hilltop at the right, small red-roofed village at the lower left. The upper middle third of the image is mostly open sky so a title can be placed there."},
-
-    {"id": "ladder", "phase": 2, "tone": "pixel", "refs": ["@region-town"],
-     "prompt": "One single very tall straight wooden ladder drawn perfectly vertical, seen flat from the front with no perspective: two warm golden-brown side rails and at least ten evenly spaced identical rungs, a little highlight on each rail. The ladder fills the full height of a tall portrait image and is narrow. Only the ladder, isolated and centered on a plain solid pure white background, with no shadow and no ground."},
-    {"id": "slide", "phase": 2, "tone": "pixel", "refs": ["@region-town"],
-     "prompt": "One single very long straight playground slide chute drawn perfectly vertical, seen flat from directly above with no perspective: a bright orange plastic trough with raised yellow side edges and a lighter shiny center stripe, exactly the same shape along its whole length, no ladder, no top platform, no curve. It fills the full height of a tall portrait image and is narrow. Only the slide, isolated and centered on a plain solid pure white background, with no shadow and no ground."},
-    {"id": "tile-icons", "phase": 2, "tone": "item", "refs": ["@region-town"],
-     "prompt": "A sheet of exactly five separate small game board icons in one horizontal row with wide empty gaps between them, all the same size, in this order from left to right: 1) an open blue book with a glowing yellow sparkle above it, 2) a single face-down playing card with a purple back decorated with a white star pattern, 3) a red rotating alarm siren light flashing, 4) a tiny cozy house with a red roof, 5) a shiny golden trophy cup. Plain solid pure white background, nothing touching or overlapping."},
-    {"id": "card-ability", "phase": 2, "tone": "pixel", "refs": ["@region-town"],
-     "prompt": "An empty vertical trading card frame in pixel art with a 2:3 portrait aspect ratio, filling the whole image: a thick shiny golden-yellow border with little sparkle ornaments in the four corners, a large empty plain pale cream rectangular window in the upper 60 percent, and an empty plain pale cream rounded text box in the lower part. Absolutely no text, no symbols inside the windows."},
-    {"id": "card-rocket", "phase": 2, "tone": "pixel", "refs": ["@region-town"],
-     "prompt": "An empty vertical trading card frame in pixel art with a 2:3 portrait aspect ratio, filling the whole image: a thick crimson-red and charcoal-black border with small bolt-shaped rivets in the four corners, a large empty plain light grey rectangular window in the upper 60 percent, and an empty plain light grey rounded text box in the lower part. Absolutely no text, no logos, no symbols inside the windows."},
-    {"id": "card-event", "phase": 2, "tone": "pixel", "refs": ["@region-town"],
-     "prompt": "An empty vertical trading card frame in pixel art with a 2:3 portrait aspect ratio, filling the whole image: a thick sky-blue and leaf-green border with small four-leaf clover ornaments in the four corners, a large empty plain pale mint rectangular window in the upper 60 percent, and an empty plain pale mint rounded text box in the lower part. Absolutely no text, no symbols inside the windows."},
-    {"id": "event-icons", "phase": 2, "tone": "item", "refs": ["@region-town"],
-     "prompt": "A sheet of exactly twelve separate game card icons arranged in a neat grid of 4 columns and 3 rows with wide empty gaps, all the same size, in this order reading left to right, top to bottom: 1) two white dice with a green circular arrow around them, 2) a small red and white rocket ship blasting upward with flames, 3) two curved arrows, one blue and one red, swapping places in a circle, 4) a short wooden ladder with yellow sparkles, 5) a yellow banana peel, 6) an open wooden treasure chest glowing with gold, 7) a green four-leaf clover, 8) an orange and white striped road barricade, 9) a purple swirling magic portal, 10) a green glowing round shield, 11) a bright yellow light bulb, 12) two face-down cards fanned out with a golden star between them. Plain solid pure white background, nothing touching or overlapping."},
-    {"id": "rocket-icons", "phase": 2, "tone": "item", "refs": ["@region-town"],
-     "prompt": "A sheet of exactly eight separate game card icons arranged in a neat grid of 4 columns and 2 rows with wide empty gaps, all the same size, in this order reading left to right, top to bottom: 1) a pair of black running boots with speed lines, 2) a puff of dark purple smoke with sparkles, 3) a double red fire flame, 4) a white surrender flag on a stick, 5) a soft pillow with a sleeping cap, 6) a red map location pin, 7) a yellow U-turn road sign arrow, 8) an open metal cage door. Plain solid pure white background, nothing touching or overlapping."},
-    {"id": "quiz-bg", "phase": 2, "tone": "pixel", "refs": ["@region-town"],
-     "prompt": "A wide 16:9 pixel art background of the inside of a cozy bright research laboratory seen from the front in a classic handheld RPG interior style: wooden bookshelves full of colorful books along the back wall, a big window with sunshine, potted plants, a blackboard-green board with nothing written on it, a warm wooden floor. The central area is calm and uncluttered so a quiz window can be placed on top."},
-    {"id": "capture-bg", "phase": 2, "tone": "pixel", "refs": ["@region-town"],
-     "prompt": "A wide 16:9 pixel art background of a grassy field at dusk with a purple-orange sunset sky, a few dark silhouetted trees, and two crossing bright spotlight beams sweeping across the sky like a dramatic stage. Playful and exciting, not scary. The central lower area is open grass so characters can stand there."},
-    {"id": "win-bg", "phase": 2, "tone": "pixel", "refs": ["@region-town"],
-     "prompt": "A wide 16:9 pixel art background of a sunny celebration on a hilltop: a three-step winners podium (gold in the middle, silver left, bronze right) with empty tops, colorful confetti and triangle bunting flags in the sky, blue sky with clouds, green grass. The podium tops are empty so characters can be placed on them."}
-  ]
+  {
+   "id": "region-forest",
+   "phase": 1,
+   "tone": "pixel",
+   "prompt": "A wide landscape image with a 2:1 aspect ratio: a top-down pixel art game map of a deep green forest clearing used as the floor of a board game. Darker mossy green grass with a subtle checkered tile texture fills the whole image, small mushrooms, ferns, fallen leaves and tiny bushes spread evenly, dense round pine and oak tree canopies only along the very left and right edges. The middle area stays open, flat and low-contrast so that number tiles can be placed on top. No big objects in the middle, no path, no border frame."
+  },
+  {
+   "id": "region-ice",
+   "phase": 1,
+   "tone": "pixel",
+   "prompt": "A wide landscape image with a 2:1 aspect ratio: a top-down pixel art game map of the floor of a sparkling ice cave used as the floor of a board game. Pale icy blue and white frozen ground with a subtle checkered ice-tile texture fills the whole image, tiny snow drifts, small cracks and little sparkles spread evenly, light blue ice crystal clusters and rocky cave walls only along the very left and right edges. The middle area stays open, flat and low-contrast so that number tiles can be placed on top. No big objects in the middle, no path, no border frame."
+  },
+  {
+   "id": "region-champion",
+   "phase": 1,
+   "tone": "pixel",
+   "prompt": "A wide landscape image with a 2:1 aspect ratio: a top-down pixel art game map of a rocky mountain road near a champion's stadium used as the floor of a board game. Warm sandy-brown rocky ground with a subtle checkered stone-tile texture fills the whole image, tiny pebbles and small tufts of dry grass spread evenly, large boulders, cliffs and a few red and gold banner flags only along the very left and right edges. The middle area stays open, flat and low-contrast so that number tiles can be placed on top. No big objects in the middle, no path, no border frame."
+  },
+  {
+   "id": "title-bg",
+   "phase": 1,
+   "tone": "pixel",
+   "prompt": "A wide 16:9 pixel art title screen background for a cheerful board game adventure: a sunny sky with fluffy clouds, green rolling hills built as stepped terraces, tall wooden ladders leaning between the terraces and bright orange playground slides curving down from them, a small golden trophy shining on the highest hilltop at the right, small red-roofed village at the lower left. The upper middle third of the image is mostly open sky so a title can be placed there."
+  },
+  {
+   "id": "ladder",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "One single very tall straight wooden ladder drawn perfectly vertical, seen flat from the front with no perspective: two warm golden-brown side rails and at least ten evenly spaced identical rungs, a little highlight on each rail. The ladder fills the full height of a tall portrait image and is narrow. Only the ladder, isolated and centered on a plain solid pure white background, with no shadow and no ground."
+  },
+  {
+   "id": "slide",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "One single very long straight playground slide chute drawn perfectly vertical, seen flat from directly above with no perspective: a bright orange plastic trough with raised yellow side edges and a lighter shiny center stripe, exactly the same shape along its whole length, no ladder, no top platform, no curve. It fills the full height of a tall portrait image and is narrow. Only the slide, isolated and centered on a plain solid pure white background, with no shadow and no ground."
+  },
+  {
+   "id": "tile-icons",
+   "phase": 2,
+   "tone": "item",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "A sheet of exactly five separate small game board icons in one horizontal row with wide empty gaps between them, all the same size, in this order from left to right: 1) an open blue book with a glowing yellow sparkle above it, 2) a single face-down playing card with a purple back decorated with a white star pattern, 3) a red rotating alarm siren light flashing, 4) a tiny cozy house with a red roof, 5) a shiny golden trophy cup. Plain solid pure white background, nothing touching or overlapping."
+  },
+  {
+   "id": "card-ability",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "An empty vertical trading card frame in pixel art with a 2:3 portrait aspect ratio, filling the whole image: a thick shiny golden-yellow border with little sparkle ornaments in the four corners, a large empty plain pale cream rectangular window in the upper 60 percent, and an empty plain pale cream rounded text box in the lower part. Absolutely no text, no symbols inside the windows."
+  },
+  {
+   "id": "card-rocket",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "An empty vertical trading card frame in pixel art with a 2:3 portrait aspect ratio, filling the whole image: a thick crimson-red and charcoal-black border with small bolt-shaped rivets in the four corners, a large empty plain light grey rectangular window in the upper 60 percent, and an empty plain light grey rounded text box in the lower part. Absolutely no text, no logos, no symbols inside the windows."
+  },
+  {
+   "id": "card-event",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "An empty vertical trading card frame in pixel art with a 2:3 portrait aspect ratio, filling the whole image: a thick sky-blue and leaf-green border with small four-leaf clover ornaments in the four corners, a large empty plain pale mint rectangular window in the upper 60 percent, and an empty plain pale mint rounded text box in the lower part. Absolutely no text, no symbols inside the windows."
+  },
+  {
+   "id": "event-icons",
+   "phase": 2,
+   "tone": "item",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "A sheet of exactly twelve separate game card icons arranged in a neat grid of 4 columns and 3 rows with wide empty gaps, all the same size, in this order reading left to right, top to bottom: 1) two white dice with a green circular arrow around them, 2) a small red and white rocket ship blasting upward with flames, 3) two curved arrows, one blue and one red, swapping places in a circle, 4) a short wooden ladder with yellow sparkles, 5) a yellow banana peel, 6) an open wooden treasure chest glowing with gold, 7) a green four-leaf clover, 8) an orange and white striped road barricade, 9) a purple swirling magic portal, 10) a green glowing round shield, 11) a bright yellow light bulb, 12) two face-down cards fanned out with a golden star between them. Plain solid pure white background, nothing touching or overlapping."
+  },
+  {
+   "id": "rocket-icons",
+   "phase": 2,
+   "tone": "item",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "A sheet of exactly eight separate game card icons arranged in a neat grid of 4 columns and 2 rows with wide empty gaps, all the same size, in this order reading left to right, top to bottom: 1) a pair of black running boots with speed lines, 2) a puff of dark purple smoke with sparkles, 3) a double red fire flame, 4) a white surrender flag on a stick, 5) a soft pillow with a sleeping cap, 6) a red map location pin, 7) a yellow U-turn road sign arrow, 8) an open metal cage door. Plain solid pure white background, nothing touching or overlapping."
+  },
+  {
+   "id": "quiz-bg",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "A wide 16:9 pixel art background of the inside of a cozy bright research laboratory seen from the front in a classic handheld RPG interior style: wooden bookshelves full of colorful books along the back wall, a big window with sunshine, potted plants, a blackboard-green board with nothing written on it, a warm wooden floor. The central area is calm and uncluttered so a quiz window can be placed on top."
+  },
+  {
+   "id": "capture-bg",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "A wide 16:9 pixel art background of a grassy field at dusk with a purple-orange sunset sky, a few dark silhouetted trees, and two crossing bright spotlight beams sweeping across the sky like a dramatic stage. Playful and exciting, not scary. The central lower area is open grass so characters can stand there."
+  },
+  {
+   "id": "win-bg",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "A wide 16:9 pixel art background of a sunny celebration on a hilltop: a three-step winners podium (gold in the middle, silver left, bronze right) with empty tops, colorful confetti and triangle bunting flags in the sky, blue sky with clouds, green grass. The podium tops are empty so characters can be placed on them."
+  },
+  {
+   "id": "lane-dirt",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "A seamless tileable square pixel art texture of a packed warm light-brown dirt path seen from directly above, a few tiny pebbles and subtle darker specks, evenly lit, fills the whole square edge to edge with no border, no vignette and no objects, so it repeats without visible seams."
+  },
+  {
+   "id": "hedge",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "A wide 4:1 horizontal strip of pixel art garden hedge seen from above at a slight top-down RPG angle: a continuous row of round bright green leafy bushes with a few tiny white and yellow flowers, darker green shading at the bottom, the bushes fill the full height and run off both the left and right edges so the strip can repeat side by side. Plain solid pure white above and below is not allowed; the bushes fill the entire image."
+  },
+  {
+   "id": "block-wood",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "One single square wooden block for a board game space, seen from slightly above like a top-down RPG map object: a light warm wooden top face made of two planks with a thin darker outline and a beveled front edge showing a little darker wood side, small soft shadow underneath. The top face is plain and flat with plenty of empty room for a big number. Only the block, centered, isolated on a plain solid pure white background."
+  },
+  {
+   "id": "block-stone",
+   "phase": 2,
+   "tone": "pixel",
+   "refs": [
+    "@region-town"
+   ],
+   "prompt": "One single square stone block for a board game space, seen from slightly above like a top-down RPG map object: a light grey cut-stone top face with a thin darker outline and a beveled front edge showing a darker grey side, a few tiny moss specks at the corners, small soft shadow underneath. The top face is plain and flat with plenty of empty room for a big number. Only the block, centered, isolated on a plain solid pure white background."
+  }
+ ]
 }

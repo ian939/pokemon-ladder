@@ -52,7 +52,7 @@ function game(mode, n) {
   eq(R.validateMap(R.MAPS[200]), [], "200칸 맵 검사");
   eq(R.cellXY(1), { row: 0, col: 0 }, "1번 칸 위치");
   eq(R.cellXY(11), { row: 1, col: 9 }, "11번 칸 지그재그");
-  eq(R.MAPS[100].dice, 1, "100칸 주사위 1개");
+  eq(R.MAPS[100].dice, 2, "100칸 주사위 2개 (사용자 요청)");
   eq(R.MAPS[200].dice, 2, "200칸 주사위 2개");
 
   // --- 주사위 개수 ---
@@ -60,7 +60,7 @@ function game(mode, n) {
     const s = game(mode); s.players[0].pos = 50; s.rocket.pos = mode - 1;
     const io = makeIO(); await R.playerTurn(s, io);
     const d = io.log.find((e) => e.type === "dice");
-    eq(d.dice.length, mode === 100 ? 1 : 2, mode + "칸 플레이어 주사위 수");
+    eq(d.dice.length, 2, mode + "칸 플레이어 주사위 2개");
     const s2 = game(mode); s2.players.forEach((p) => (p.pos = 2)); s2.rocket.pos = 60;
     const io2 = makeIO(); await R.rocketTurn(s2, io2);
     eq(io2.log.find((e) => e.type === "rocket-dice").dice.length, 1, mode + "칸 로켓단 주사위 1개");
@@ -68,16 +68,16 @@ function game(mode, n) {
 
   // --- 잠만보: 100칸 주사위 2 → -4 ---
   {
-    const s = game(100); s.players[0].pos = 50; s.players[0].st.minus6 = true; s.force = [2];
+    const s = game(100); s.players[0].pos = 50; s.players[0].st.minus6 = true; s.force = [1, 1];
     const io = makeIO(); await R.playerTurn(s, io);
-    eq(s.players[0].pos, 46 === 46 ? R.MAPS[100].slides[46] : 46, "잠만보 100칸 2 → -4 (46은 미끄럼틀 → 29)");
+    eq(s.players[0].pos, 46 === 46 ? R.MAPS[100].slides[46] : 46, "잠만보 100칸 합 2 → -4 (46은 미끄럼틀 → 29)");
     ok(io.log.some((e) => e.type === "move" && e.from === 50 && e.to === 46), "잠만보 -4 실제 뒤로 이동");
     ok(!s.players[0].st.minus6, "잠만보 상태 한 번만");
   }
   {
-    const s = game(100); s.players[0].pos = 50; s.players[0].st.minus6 = true; s.force = [4];
+    const s = game(100); s.players[0].pos = 50; s.players[0].st.minus6 = true; s.force = [1, 3];
     await R.playerTurn(s, makeIO()); eq(s.players[0].pos, 48, "잠만보 4 → -2");
-    const s2 = game(100); s2.players[0].pos = 50; s2.players[0].st.minus6 = true; s2.force = [6];
+    const s2 = game(100); s2.players[0].pos = 50; s2.players[0].st.minus6 = true; s2.force = [3, 3];
     const io2 = makeIO(); await R.playerTurn(s2, io2); eq(s2.players[0].pos, 50, "잠만보 6 → 0");
     ok(has(io2, "stay"), "0칸이면 제자리");
     ok(!io2.log.some((e) => e.type === "cell"), "0칸이면 칸 이벤트 없음");
@@ -91,7 +91,7 @@ function game(mode, n) {
   }
   // 경계: 1 아래로 안 감
   {
-    const s = game(100); s.players[0].pos = 2; s.players[0].st.minus6 = true; s.force = [1];
+    const s = game(100); s.players[0].pos = 2; s.players[0].st.minus6 = true; s.force = [1, 1];
     await R.playerTurn(s, makeIO()); eq(s.players[0].pos, 1, "1번 칸 아래로 안 내려감");
   }
 
@@ -190,7 +190,7 @@ function game(mode, n) {
   }
   // 사다리 도착 칸은 연쇄·이벤트 없음 (4→16, 한 번만)
   {
-    const s = game(100); s.players[0].pos = 1; s.force = [3];
+    const s = game(100); s.players[0].pos = 1; s.force = [1, 2];
     const io = makeIO(); await R.playerTurn(s, io);
     eq(s.players[0].pos, 16, "주사위 3 → 4 사다리 → 16");
     eq(io.log.filter((e) => e.type === "chute").length, 1, "사다리 1회");
@@ -214,7 +214,7 @@ function game(mode, n) {
   {
     const s = game(100); s.players[0].pos = 50; s.players[0].ability = ["P02"]; s.rocket.pos = 99;
     const io = makeIO({ choices: { action: "P02" } }); await R.playerTurn(s, io);
-    eq(io.log.find((e) => e.type === "dice").dice.length, 2, "파이리 → 100칸 주사위 2개");
+    eq(io.log.find((e) => e.type === "dice").dice.length, 3, "파이리 → 100칸 주사위 3개");
     const s2 = game(200); s2.players[0].pos = 50; s2.players[0].ability = ["P02"];
     const io2 = makeIO({ choices: { action: "P02" } }); await R.playerTurn(s2, io2);
     eq(io2.log.find((e) => e.type === "dice").dice.length, 3, "파이리 → 200칸 주사위 3개");
@@ -245,7 +245,7 @@ function game(mode, n) {
   }
   // 승리: 결승 초과도 승리
   {
-    const s = game(100); s.players[0].pos = 98; s.force = [6];
+    const s = game(100); s.players[0].pos = 98; s.force = [3, 3];
     await R.step(s, makeIO()); eq(s.winner, 0, "결승 초과 → 승리");
     eq(s.players[0].pos, 100, "결승칸에 멈춤");
   }
@@ -278,27 +278,27 @@ function game(mode, n) {
   }
   // 퀴즈 보상
   {
-    const s = game(100); s.players[0].pos = 1; s.force = [5]; // 6 퀴즈 칸
+    const s = game(100); s.players[0].pos = 1; s.force = [2, 3]; // 6 퀴즈 칸
     const io = makeIO({ quiz: ["first"], choices: { reward: "card" } }); await R.playerTurn(s, io);
     ok(s.players[0].ability.length === 1, "힌트 없이 정답 → 능력 카드 선택");
-    const s2 = game(100); s2.players[0].pos = 1; s2.force = [5];
+    const s2 = game(100); s2.players[0].pos = 1; s2.force = [2, 3];
     await R.playerTurn(s2, makeIO({ quiz: ["hint"] })); eq(s2.players[0].pos, 8, "힌트 후 정답 → +2");
-    const s3 = game(100); s3.players[0].pos = 1; s3.force = [5];
+    const s3 = game(100); s3.players[0].pos = 1; s3.force = [2, 3];
     await R.playerTurn(s3, makeIO({ quiz: ["first"], choices: { reward: "move" } })); eq(s3.players[0].pos, 9, "정답 +3 (9 = 카드 칸이지만 이벤트 없음)");
   }
   // 보너스 퀴즈: 3번째 턴, 이미 퀴즈 했으면 건너뜀, 한 턴 최대 1문제
   {
-    const s = game(100); s.players[0].pos = 50; s.players[0].turns = 2; s.force = [1]; // 51 일반 칸
+    const s = game(100); s.players[0].pos = 49; s.players[0].turns = 2; s.force = [1, 1]; // 51 일반 칸
     const io = makeIO(); await R.playerTurn(s, io);
     ok(io.log.some((e) => e.type === "quiz" && e.ctx.reason === "bonus"), "3번째 턴 보너스 퀴즈");
-    const s2 = game(100); s2.players[0].pos = 1; s2.players[0].turns = 2; s2.force = [5]; // 6 퀴즈 칸
+    const s2 = game(100); s2.players[0].pos = 1; s2.players[0].turns = 2; s2.force = [2, 3]; // 6 퀴즈 칸
     const io2 = makeIO({ quiz: ["fail"] }); await R.playerTurn(s2, io2);
     eq(io2.log.filter((e) => e.type === "quiz").length, 1, "퀴즈 칸 턴엔 보너스 건너뜀");
   }
 
   // --- 같은 칸이면 넘어서 한 칸 앞으로 (2026-10-17 사용자 요청) ---
   {
-    const s = game(100); s.players[0].pos = 50; s.players[1].pos = 53; s.force = [3];
+    const s = game(100); s.players[0].pos = 50; s.players[1].pos = 53; s.force = [1, 2];
     const io = makeIO(); await R.playerTurn(s, io);
     eq(s.players[0].pos, 54, "53에 친구가 있으면 넘어서 54 (54는 카드 칸)");
     ok(has(io, "hop"), "넘기 연출");
@@ -310,14 +310,14 @@ function game(mode, n) {
     eq(s.players[0].pos, 54, "두 명 연달아 있으면 둘 다 넘음 (52·53 → 54)");
   }
   {
-    const s = game(100); s.players[0].pos = 10; s.players[1].pos = 12; s.force = [2];
+    const s = game(100); s.players[0].pos = 10; s.players[1].pos = 12; s.force = [1, 1];
     await R.playerTurn(s, makeIO());
     eq(s.players[0].pos, 31, "넘어간 칸이 사다리 시작(13)이면 탐 → 31");
   }
   {
     const s = game(100); s.players[0].pos = 1; s.players[1].pos = 1;
     eq(s.players.map((p) => p.pos), [1, 1], "출발 칸은 같이 있어도 됨");
-    const s2 = game(100); s2.players[0].pos = 96; s2.players[1].pos = 99; s2.force = [3];
+    const s2 = game(100); s2.players[0].pos = 96; s2.players[1].pos = 99; s2.force = [1, 2];
     await R.step(s2, makeIO());
     eq(s2.winner, 0, "99의 친구를 넘으면 결승 → 우승");
   }

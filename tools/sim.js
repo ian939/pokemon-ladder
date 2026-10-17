@@ -47,8 +47,8 @@ const pct = (arr, p) => arr.slice().sort((a, b) => a - b)[Math.floor(arr.length 
         firstWin[s.winner === 0 ? 0 : 1]++;
       }
       const avg = (a) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1);
-      // 시간 어림: 사람 한 차례 약 25초 + 퀴즈 1문제 약 40초 + 로켓단 차례 약 10초
-      const mins = (+avg(rounds) * (np * 25 + 10) + +avg(quizPP) * np * 40) / 60;
+      // 시간 어림: 사람 한 차례 약 15초 + 퀴즈 1문제 약 40초 + 로켓단 차례 약 6초
+      const mins = (+avg(rounds) * (np * 15 + 6) + +avg(quizPP) * np * 40) / 60; // v2: 차례 안내를 기다리지 않음 (한 차례 약 15초)
       console.log(`${mode}칸 ${np}명: 라운드 평균 ${avg(rounds)} (10%~90%: ${pct(rounds, 0.1)}~${pct(rounds, 0.9)}) · 1인 퀴즈 ${avg(quizPP)}문제 · 포획 ${avg(caps)}번/판 · 1P 승률 ${(firstWin[0] / N * 100).toFixed(0)}% · 예상 ${mins.toFixed(0)}분`);
     }
   }

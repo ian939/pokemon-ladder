@@ -140,7 +140,7 @@ def play(pg, label, max_steps=6000, wrong_every=4, shots=True):
             except Exception:
                 continue
             seen["roll"] += 1
-            d = pg.evaluate("() => document.querySelectorAll('#dice .die').length")
+            d = pg.evaluate("() => document.querySelectorAll('#dice .die3d').length")
             seen["dice"].add(d)
             continue
         pg.wait_for_timeout(25)
@@ -181,12 +181,13 @@ def main():
         pg.click("text=모험 출발")
         pg.wait_for_selector("#board .cell")
         check(pg.locator("#board .cell").count() == 100, "100칸 판에 칸 100개")
-        check(pg.locator(".chute.ladder").count() == 8 and pg.locator(".chute.slide").count() == 6, "사다리 8 · 미끄럼틀 6 그림")
+        check(pg.locator(".chutes g.ladder").count() == 8 and pg.locator(".chutes g.slide").count() == 6, "사다리 8 · 무지개 미끄럼틀 6 그림")
+        check(pg.locator(".nums .num").count() == 100, "칸 숫자 100개 (미끄럼틀 위층)")
         pg.screenshot(path=str(OUT / "03-board100.png"))
         touch_targets(pg, "판 화면 1180×820")
         seen = play(pg, "g100")
         check(pg.locator(".screen-result").count() == 1, f"100칸 판 끝까지 → 우승 화면 ({seen['sec']}초, 주사위 {seen['roll']}번, 퀴즈 {seen['quiz']}문제, 고르기 {seen['modal']}번)")
-        check(seen["dice"] == {1}, f"100칸 주사위 1개 화면 ({seen['dice']})")
+        check(seen["dice"] == {2}, f"100칸 주사위 2개 화면 ({seen['dice']})")
         check(seen["wrong"] > 0, "틀린 답 경로도 지나감")
         pg.screenshot(path=str(OUT / "04-result100.png"))
         touch_targets(pg, "우승 화면")
