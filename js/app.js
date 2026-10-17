@@ -249,7 +249,7 @@ function showHelp() {
   const d = layer("modal help", `<div class="win-box">
     <h2>📖 이렇게 놀아요</h2>
     <ol class="help-list">
-      <li>🎲 주사위를 굴려서 앞으로! 가장 먼저 <b>결승</b>에 닿으면 우승!</li>
+      <li>🎡 돌림판(One~Twelve)을 돌려서 앞으로! <b>100번 칸에 딱 맞게</b> 들어가면 골인! (넘치면 그 자리)</li><li>👣 다른 사람이 있는 칸에 멈추면 그 사람을 밟아요 → 밟힌 사람은 10칸 뒤로!</li>
       <li><img src="${IMG.tile("ladder")}" alt="" onerror="this.remove()">🪜 <b>사다리</b> 칸에 멈추면 위로, 🛝 <b>미끄럼틀</b> 칸에 멈추면 아래로.</li>
       <li><img src="${IMG.tile("quiz")}" alt=""> <b>퀴즈 칸</b>: 수학·영어 문제! 바로 맞히면 카드 또는 3칸.</li>
       <li><img src="${IMG.tile("card")}" alt=""> <b>카드 칸</b>: 카드를 뽑아요. 능력 카드는 내 차례에 1장 쓸 수 있어요.</li>
@@ -265,6 +265,7 @@ function showHelp() {
 // =====================================================================
 // 시작 설정 (모드 · 인원 · 트레이너 · 이름 · 난이도)
 // =====================================================================
+const SHOW_200 = QS.has("200"); // 200칸은 숨김 — 주소에 ?200 을 붙이면 보인다
 const DEFAULT_SETUP = {
   mode: 100,
   players: [
@@ -274,14 +275,17 @@ const DEFAULT_SETUP = {
 };
 function renderSetup() {
   const st = JSON.parse(JSON.stringify(Store.data.setup || DEFAULT_SETUP));
+  if (!SHOW_200) st.mode = 100; // 200칸은 지금 숨김 (2026-10-17 사용자 요청: 100칸만 오픈)
   const draw = () => {
+    const solo = st.players.length === 1;
     const taken = st.players.map((p) => p.trainer);
     show(`
     <div class="setup">
       <header class="bar"><button class="btn" data-a="back">◀ 처음</button><h2>새 모험 준비</h2><span></span></header>
       <section class="win-box modes">
-        <button class="mode ${st.mode === 100 ? "on" : ""}" data-a="mode" data-v="100"><b>100칸</b><small>주사위 2개 · 짧은 모험 (15분쯤)</small></button>
-        <button class="mode ${st.mode === 200 ? "on" : ""}" data-a="mode" data-v="200"><b>200칸</b><small>주사위 2개 · 긴 모험 (30분쯤)</small></button>
+        <button class="mode ${solo ? "on" : ""}" data-a="solo" data-v="1"><b>👤 혼자 하기</b><small>로켓단을 피해 100칸 골인!</small></button>
+        <button class="mode ${solo ? "" : "on"}" data-a="solo" data-v="0"><b>👥 같이 하기</b><small>2~4명 · 먼저 100칸 골인!</small></button>
+        ${SHOW_200 ? `<button class="mode ${st.mode === 200 ? "on" : ""}" data-a="mode" data-v="${st.mode === 200 ? 100 : 200}"><b>${st.mode === 200 ? "200칸" : "100칸"}</b><small>눌러서 바꾸기</small></button>` : ""}
       </section>
       <section class="players">
         ${st.players.map((p, i) => `
@@ -302,7 +306,7 @@ function renderSetup() {
             <span class="lv">영어 <button class="step" data-a="lv" data-k="en" data-i="${i}" data-v="-1">−</button><b>LV.${p.en}</b><button class="step" data-a="lv" data-k="en" data-i="${i}" data-v="1">+</button></span>
           </div>
         </div>`).join("")}
-        ${st.players.length < 4 ? `<button class="win-box add" data-a="add">➕ 한 명 더</button>` : ""}
+        ${st.players.length < 4 && st.players.length > 1 ? `<button class="win-box add" data-a="add">➕ 한 명 더</button>` : ""}
       </section>
       <footer class="setup-go"><button class="btn big primary" data-a="go">🚀 모험 출발!</button></footer>
     </div>`, "screen-setup");
@@ -315,6 +319,14 @@ function renderSetup() {
     const a = b.dataset.a, i = +b.dataset.i;
     if (a === "back") return renderTitle();
     if (a === "mode") st.mode = +b.dataset.v;
+    if (a === "solo") {
+      if (b.dataset.v === "1") { st.together = st.players.slice(1); st.players = st.players.slice(0, 1); }
+      else if (st.players.length === 1) {
+        const back = (st.together || []).filter((p) => p.trainer !== st.players[0].trainer && p.name !== st.players[0].name);
+        if (back.length) st.players.push(...back.slice(0, 3));
+        else { const free = R.TRAINERS.find((t) => t.id !== st.players[0].trainer); st.players.push({ name: st.players[0].name === "엄마" ? "아빠" : "엄마", trainer: free.id, adult: true, math: 4, en: 4 }); }
+      }
+    }
     if (a === "tr") st.players[i].trainer = b.dataset.v;
     if (a === "adult") {
       const ad = b.dataset.v === "1";
@@ -379,6 +391,7 @@ const G = {
 };
 
 function startGame(setup) {
+  if (!SHOW_200) setup = Object.assign({}, setup, { mode: 100 });
   const seed = QS.has("seed") ? +QS.get("seed") : (Date.now() ^ (Math.random() * 1e9)) >>> 0;
   const s = R.createGame({ mode: setup.mode, seed, players: setup.players });
   s.players.forEach((p) => { p.qs = { n: 0, first: 0, hint: 0, explained: 0, fail: 0, math: 0, en: 0 }; p.lastSubj = p.adult ? "en" : "math"; });
@@ -386,7 +399,7 @@ function startGame(setup) {
   s.started = Date.now();
   Store.data.game = s;
   Store.save();
-  say(L.newGame);
+  say(s.solo ? L.solo : L.newGame);
   runGame(s);
 }
 function resumeGame() {
@@ -430,19 +443,24 @@ function renderBoardScreen() {
   show(`
   <div class="game">
     <div class="board-frame"><div class="board-view" id="boardView"><div class="board" id="board"></div></div>
-      <div class="turn-banner" id="turnBanner"></div></div>
+      <div class="turn-banner" id="turnBanner"></div>
+      <div class="wheel-stage hidden" id="wheelStage">
+        <div class="wheel-box">
+          <div class="wheel-badge" id="wheelBadge"></div>
+          <div class="wheel"><div class="wheel-disc" id="wheelDisc"></div><div class="wheel-pointer"></div>
+            <button class="wheel-hub" id="rollBtn" disabled aria-label="돌림판 돌리기">돌려!</button></div>
+          <div class="wheel-result" id="wheelResult"></div>
+        </div>
+      </div></div>
     <aside class="hud" id="hud">
       <div class="hud-top" id="hudTop"></div>
       <div class="turn-card" id="turnCard"></div>
-      <button class="dice-tray" id="rollBtn" disabled aria-label="주사위 굴리기">
-        <span class="dice" id="dice"></span><span class="tray-label" id="trayLabel">주사위를 눌러요!</span>
-      </button>
+      <div class="spin-result" id="spinResult"></div>
       <div class="hand" id="hand"></div>
       <ul class="plist" id="plist"></ul>
       <div class="msg" id="msg"><span id="msgText">${esc(L.title)}</span></div>
     </aside>
   </div>`, "screen-game mode-" + s.mode);
-  if (G.lastDice) setDice(G.lastDice); else idleDice(R.MAPS[s.mode].dice, s.phase === "rocket");
   layoutBoard();
   drawBoard(map);
   renderPanel();
@@ -667,11 +685,11 @@ function renderPanel(opt) {
   tc.style.setProperty("--pc", rocketPhase ? "#2b2b2b" : TRAINER[cur.trainer].color);
   tc.innerHTML = rocketPhase ? `${rocketHTML()}<div><b>로켓단</b><small>차례다옹!</small></div>`
     : `${trainerHTML(cur, "big")}<div><b>${esc(cur.name)}</b><small>${cur.pos}번 칸</small></div>`;
-  const tray = $("#rollBtn");
-  tray.disabled = !opt.roll;
-  tray.classList.toggle("ready", !!opt.roll);
-  tray.classList.toggle("rocket", rocketPhase);
-  $("#trayLabel").textContent = rocketPhase ? "로켓단 주사위" : opt.roll ? "주사위를 눌러요!" : `${cur.name}의 주사위`;
+  const sr = $("#spinResult");
+  const ls = G.lastSpin;
+  sr.className = "spin-result" + (ls && ls.rocket ? " rocket" : "");
+  sr.innerHTML = ls ? `<small>${ls.rocket ? "로켓단 돌림판" : esc(ls.name) + "의 돌림판"}</small><b>${ls.words}</b><i>${ls.total}칸</i>`
+    : rocketPhase ? `<small>로켓단 돌림판</small><b>?</b><i>로켓단이 돌려요</i>` : `<small>돌림판</small><b>?</b><i>판 가운데를 눌러요</i>`;
   $("#hand").innerHTML = rocketPhase ? "" : `<div class="slots">${slot(cur.ability[0], "ability")}${slot(cur.ability[1], "ability")}${slot(cur.held, "held")}</div>`;
   $("#hand").classList.toggle("hidden", rocketPhase);
   $("#plist").innerHTML = s.players.map((p, i) => {
@@ -697,52 +715,103 @@ function renderPanel(opt) {
   markDanger();
 }
 
-// ---------- 입체 주사위 ----------
-const DIE_TURN = { 1: [0, 0], 2: [0, -90], 3: [-90, 0], 4: [90, 0], 5: [0, 90], 6: [0, 180] };
-function faceHTML(v) {
-  const pips = { 1: [5], 2: [3, 7], 3: [3, 5, 7], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] }[v];
-  return `<span class="face f${v}">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<i class="${pips.includes(k) ? "pip" : ""}"></i>`).join("")}</span>`;
+// ---------- 돌림판 (주사위 대신, 2026-10-17 사용자 요청) ----------
+// 사람 = 12칸 One~Twelve, 로켓단 = 8칸 One~Eight. 판 가운데에 뜨고 가운데 버튼을 눌러 돌린다.
+const WORDS = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+const WHEEL_COLORS = ["#e8453c", "#f7c33b", "#3a8fe0", "#3fb35a"];
+const ROCKET_COLORS = ["#c0262d", "#2b2b2b"];
+const Wheel = {
+  n: 0, rot: 0, rocket: false,
+  build(n, rocket) {
+    const disc = $("#wheelDisc");
+    if (!disc) return;
+    this.n = n; this.rocket = rocket; this.rot = 0;
+    const seg = 360 / n, R0 = 96;
+    const pt = (a, r) => `${(r * Math.sin(a * Math.PI / 180)).toFixed(2)},${(-r * Math.cos(a * Math.PI / 180)).toFixed(2)}`;
+    let g = "";
+    for (let k = 1; k <= n; k++) {
+      const a0 = (k - 1) * seg - seg / 2, a1 = a0 + seg, mid = (k - 1) * seg;
+      const col = rocket ? ROCKET_COLORS[(k - 1) % 2] : WHEEL_COLORS[(k - 1) % 4];
+      const dark = !rocket && col === "#f7c33b";
+      g += `<path d="M0,0 L${pt(a0, R0)} A${R0},${R0} 0 0 1 ${pt(a1, R0)} Z" fill="${col}" class="wedge" data-k="${k}"/>`;
+      // 칸 폭(현) 안에 들어가게: 길면 글자 폭을 줄인다 (Twelve·Eleven 이 옆 칸과 겹치지 않게)
+      const r = R0 * (n > 8 ? 0.74 : 0.7), chord = 2 * r * Math.sin(Math.PI / n) * 0.88, fs = n > 8 ? 11 : 15;
+      const fit = WORDS[k].length * fs * 0.62 > chord ? ` textLength="${chord.toFixed(1)}" lengthAdjust="spacingAndGlyphs"` : "";
+      g += `<text transform="rotate(${mid})" x="0" y="${-r}" class="wword ${dark ? "dark" : ""}" font-size="${fs}"${fit}>${WORDS[k]}</text>`;
+      g += `<circle cx="${pt(a0, R0 - 3).split(",")[0]}" cy="${pt(a0, R0 - 3).split(",")[1]}" r="2.6" class="stud"/>`;
+    }
+    disc.innerHTML = `<svg viewBox="-100 -100 200 200"><circle r="99" class="rim"/>${g}<circle r="96" class="rim-in"/></svg>`;
+    disc.style.transition = "none";
+    disc.style.transform = "rotate(0deg)";
+  },
+  show(n, badge, rocket) {
+    const st = $("#wheelStage");
+    if (!st) return;
+    if (this.n !== n || this.rocket !== !!rocket) this.build(n, !!rocket);
+    st.classList.remove("hidden");
+    st.classList.toggle("rocket", !!rocket);
+    $("#wheelBadge").innerHTML = badge;
+    $("#wheelResult").innerHTML = rocket ? "로켓단이 돌린다옹!" : "가운데를 눌러서 돌려요!";
+    $("#rollBtn").textContent = rocket ? "👿" : "돌려!";
+    this.enable(false);
+  },
+  hide() { const st = $("#wheelStage"); if (st) st.classList.add("hidden"); },
+  enable(on) { const h = $("#rollBtn"); if (h) { h.disabled = !on; h.classList.toggle("ready", !!on); } },
+  /** v 칸이 위쪽 바늘에 오도록 돌린다 */
+  async spinTo(v) {
+    const disc = $("#wheelDisc");
+    if (!disc) return;
+    const seg = 360 / this.n;
+    const jitter = (Math.random() - 0.5) * seg * 0.6;
+    const target = -(v - 1) * seg + jitter;
+    const cur = this.rot;
+    const delta = (((target - cur) % 360) + 360) % 360;
+    this.rot = cur + 360 * (TEST ? 1 : 4) + delta;
+    const dur = TEST ? 0.03 : 2.6;
+    disc.style.transition = `transform ${dur}s cubic-bezier(.12,.68,.18,1)`;
+    disc.style.transform = `rotate(${this.rot}deg)`;
+    $("#wheelResult").innerHTML = "빙글빙글…";
+    // 칸을 지날 때마다 딸깍
+    if (!TEST) {
+      let last = Math.floor(cur / seg);
+      const t0 = performance.now();
+      while (performance.now() - t0 < dur * 1000) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const m = getComputedStyle(disc).transform;
+        if (m && m !== "none") {
+          const [a, b] = m.slice(7, -1).split(",").map(Number);
+          const ang = Math.atan2(b, a) * 180 / Math.PI;
+          const k = Math.floor(ang / seg);
+          if (k !== last) { last = k; SFX.step(); }
+        }
+      }
+    } else await sleep(60);
+    $$(".wedge", disc).forEach((w) => w.classList.toggle("win", +w.dataset.k === v));
+  },
+};
+function wheelBadge(p) {
+  return `${trainerHTML(p, "big")}<div><b>${esc(p.name)}</b><span>차례!</span></div>`;
 }
-function dieHTML(v) {
-  return `<span class="die3d" data-v="${v}"><span class="cube">${[1, 2, 3, 4, 5, 6].map(faceHTML).join("")}</span></span>`;
+function rocketBadge() {
+  return `${rocketHTML()}<div><b>로켓단</b><span>차례다옹!</span></div>`;
 }
-function setDice(dice, rocket) {
-  const box = $("#dice");
-  if (!box) return;
-  box.classList.toggle("rocket", !!rocket);
-  box.innerHTML = dice.map(dieHTML).join("");
-  $$(".die3d", box).forEach((d, i) => { const [x, y] = DIE_TURN[dice[i]]; d.firstChild.style.transform = `rotateX(${x - 12}deg) rotateY(${y + 14}deg)`; });
+/** 돌림판 결과 보여 주기 (여러 번 돌리면 차례로) */
+async function spinShow(values, rocket, who) {
+  const words = [];
+  for (let i = 0; i < values.length; i++) {
+    await Wheel.spinTo(values[i]);
+    words.push(WORDS[values[i]]);
+    $("#wheelResult").innerHTML = `<b>${WORDS[values[i]]}!</b> <span>${values[i]}칸</span>`;
+    sayEn(WORDS[values[i]]);
+    SFX.good();
+    await sleep(values.length > 1 && i < values.length - 1 ? 900 : 650);
+  }
+  const total = values.reduce((a, b) => a + b, 0);
+  if (values.length > 1) $("#wheelResult").innerHTML = `<b>${words.join(" + ")}</b> <span>= ${total}칸</span>`;
+  G.lastSpin = { rocket: !!rocket, name: rocket ? "로켓단" : G.s.players[who].name, words: words.join(" + "), total };
+  await sleep(values.length > 1 ? 700 : 250);
 }
-/** 차례가 바뀌면 지난 눈·색을 지우고 "?" 주사위로 (사용자 제보: 로켓단 뒤에 빨간 주사위가 남아 있음) */
-function idleDice(n, rocket) {
-  setDice(Array(n).fill(1), rocket);
-  const box = $("#dice");
-  if (box) { box.classList.add("idle"); box.classList.remove("landed"); }
-  G.lastDice = null;
-}
-async function rollAnim(dice, rocket) {
-  const box = $("#dice");
-  if (!box) return;
-  if (box.children.length !== dice.length || box.classList.contains("rocket") !== !!rocket) setDice(dice.map(() => 1), rocket);
-  SFX.dice();
-  box.classList.remove("landed", "idle");
-  $$(".die3d", box).forEach((d, i) => {
-    const [x, y] = DIE_TURN[dice[i]];
-    d.dataset.v = dice[i];
-    const sx = 720 + 360 * Math.floor(Math.random() * 2), sy = 720 + 360 * Math.floor(Math.random() * 2);
-    const cube = d.firstChild;
-    cube.style.transition = "none";
-    cube.style.transform = `rotateX(${Math.random() * 360}deg) rotateY(${Math.random() * 360}deg)`;
-    void cube.offsetWidth;
-    cube.style.transition = `transform ${TEST ? 0.02 : 0.9 + i * 0.12}s cubic-bezier(.2,.8,.25,1)`;
-    cube.style.transform = `rotateX(${x - 12 + sx}deg) rotateY(${y + 14 + sy}deg)`;
-  });
-  box.classList.add("tumbling");
-  await sleep(1000 + dice.length * 100);
-  box.classList.remove("tumbling");
-  box.classList.add("landed");
-  G.lastDice = dice;
-}
+
 function showCardInfo(id, useBtn) {
   const d = layer("modal card-modal", `<div class="card-big">${cardHTML(id, "big")}</div>
     <div class="row">${useBtn ? `<button class="btn big primary" data-v="use">✨ 쓰기</button>` : ""}<button class="btn big" data-v="close">${useBtn ? "안 쓸래요" : "닫기"}</button></div>`);
@@ -762,7 +831,8 @@ const IO = {
     switch (e.type) {
       case "turn":
         G.current = e.who;
-        idleDice(R.MAPS[s.mode].dice, false);
+        G.lastSpin = null;
+        Wheel.show(12, wheelBadge(P(e.who)), false);
         renderPanel();
         focusCell(P(e.who).pos);
         setMsg(`${nm(e.who)}의 차례!`);
@@ -771,11 +841,13 @@ const IO = {
         await sleep(250);
         break;
       case "skip":
+        Wheel.hide();
         setMsg(`💤 ${nm(e.who)}: ${L.skip}`);
         say(L.skip); await sleep(600);
         renderPanel();
         break;
       case "card-use": {
+        Wheel.hide(); // 카드가 판을 움직이는 게 보이게
         const c = R.CARDS[e.card];
         setMsg(`✨ ${nm(e.who)}: ${c.name}!`);
         SFX.card();
@@ -787,7 +859,10 @@ const IO = {
         break;
       }
       case "dice":
-        await rollAnim(e.dice);
+        Wheel.show(12, wheelBadge(P(e.who)), false);
+        await spinShow(e.dice, false, e.who);
+        Wheel.hide();
+        renderPanel();
         setMsg(`🎲 ${e.dice.join(" + ")}${e.dice.length > 1 ? " = " + e.dice.reduce((a, b) => a + b, 0) : ""}!${e.lucky ? " (행운의 숫자)" : ""}`);
         say(String(e.dice.reduce((a, b) => a + b, 0)));
         await sleep(350);
@@ -810,17 +885,24 @@ const IO = {
         await animateMove(e.who, e.from, e.to, e.kind);
         renderPanel();
         break;
-      case "hop": {
-        setMsg(`🦘 ${nm(e.who)}: ${jo(nm(e.over), "을", "를")} 넘어서 한 칸 앞으로! (${e.from} → ${e.to})`);
-        say(L.hop);
-        const el = $("#pc" + e.who);
-        if (el) el.classList.add("hopping");
-        await animateMove(e.who, e.from, e.to, "walk");
-        await sleep(250);
-        if (el) el.classList.remove("hopping");
+      case "stomp": {
+        // 밟기: 내가 멈춘 칸에 있던 캐릭터는 10칸 뒤로 (2026-10-17 사용자 요청)
+        setMsg(`💥 ${jo(nm(e.who), "이", "가")} ${jo(nm(e.victim), "을", "를")} 밟았다! ${nm(e.victim)} ${e.from} → ${e.to}`);
+        say(L.stomp);
+        const el = $("#pc" + e.victim);
+        if (el) el.classList.add("squashed");
+        SFX.bad();
+        await sleep(650);
+        if (el) el.classList.remove("squashed");
+        await animateMove(e.victim, e.from, e.to, "slide");
         renderPanel();
         break;
       }
+      case "over":
+        setMsg(`🎯 ${nm(e.who)}: 도착까지 딱 ${e.need}칸! ${e.want}칸은 넘쳐서 그 자리에 있어요.`);
+        say(L.over);
+        { const el = $("#pc" + e.who); if (el) { el.classList.add("target"); await sleep(700); el.classList.remove("target"); } }
+        break;
       case "stay":
         setMsg(L.stay); say(L.stay); await sleep(500); break;
       case "cell": {
@@ -839,7 +921,7 @@ const IO = {
       case "effect": break;
       case "swap": setMsg(`🔄 ${nm(e.who)} ↔ ${nm(e.target)} ${L.swap}`); say(L.swap); await sleep(500); break;
       case "status":
-        setMsg(`🐌 ${nm(e.target)}: 다음 이동 -6칸!`); renderPanel(); await sleep(900); break;
+        setMsg(`🐌 잠만보 길막기! ${nm(e.target)}: 다음 이동 -6칸!`); renderPanel(); await sleep(900); break;
       case "psyduck":
         setMsg(`🌀 로켓단이 ${e.dir > 0 ? "앞으로" : "뒤로"} ${e.n}칸 휘청!`); await sleep(900); break;
       case "lullaby":
@@ -862,7 +944,8 @@ const IO = {
         await animateMove("R", e.from, e.to, "warp"); break;
       case "rocket-turn":
         G.current = -1;
-        idleDice(1, true);
+        G.lastSpin = null;
+        Wheel.show(8, rocketBadge(), true);
         renderPanel();
         focusCell(s.rocket.pos);
         setMsg(`👿 ${L.rocketTurn}`);
@@ -871,9 +954,13 @@ const IO = {
         await sleep(250);
         break;
       case "rocket-rest":
+        Wheel.hide();
         setMsg(`💤 ${L.rocketRest}`); say(L.rocketRest); await sleep(500); break;
       case "rocket-dice":
-        await rollAnim(e.dice, true);
+        Wheel.show(8, rocketBadge(), true);
+        await spinShow(e.dice, true);
+        Wheel.hide();
+        renderPanel();
         setMsg(`👿 ${e.dice.join(" + ")}! ${nm(e.target)} 쪽으로 ${e.dir > 0 ? "앞으로" : "뒤로"} 쫓아간다옹!`);
         $("#pc" + e.target) && $("#pc" + e.target).classList.add("target");
         say(L.rocketChase);
@@ -915,6 +1002,7 @@ const IO = {
     if (TEST && window.__T && window.__T.auto && kind !== "action") return window.__T.auto(kind, data);
     switch (kind) {
       case "action": return chooseAction(data);
+      case "spin": return chooseSpin(data);
       case "target": {
         const c = R.CARDS[data.card];
         say(L.pickTarget);
@@ -952,14 +1040,14 @@ const IO = {
       }
       case "reroll": {
         say(L.reroll);
-        const d = layer("modal", `<div class="win-box pick-box"><h2>🎲 ${data.dice.join(" + ")} — ${esc(L.reroll)}</h2><p>"한 번 더!" 카드를 쓰면 다시 굴려요.</p>
-          <div class="row"><button class="btn big primary" data-v="1">🎲 다시 굴리기</button><button class="btn big" data-v="0">이대로 갈래요</button></div></div>`);
+        const d = layer("modal", `<div class="win-box pick-box"><h2>🎡 ${data.dice.map((v) => WORDS[v]).join(" + ")} — ${esc(L.reroll)}</h2><p>"한 번 더!" 카드를 쓰면 돌림판을 다시 돌려요.</p>
+          <div class="row"><button class="btn big primary" data-v="1">🎡 다시 돌리기</button><button class="btn big" data-v="0">이대로 갈래요</button></div></div>`);
         const v = await waitPick(d); d.remove(); return v === "1";
       }
       case "lucky": {
         say(L.lucky);
         const d = layer("modal", `<div class="win-box pick-box"><h2>🍀 ${esc(L.lucky)}</h2>
-          <div class="row dice-pick">${[1, 2, 3, 4, 5, 6].map((v) => `<button class="die-btn" data-v="${v}">${dieHTML(v)}</button>`).join("")}</div></div>`);
+          <div class="lucky-grid">${WORDS.slice(1).map((w, i) => `<button class="lucky" data-v="${i + 1}"><b>${w}</b><small>${i + 1}</small></button>`).join("")}</div></div>`);
         const v = await waitPick(d); d.remove(); return +v;
       }
       case "defend": {
@@ -981,19 +1069,21 @@ const IO = {
   },
 };
 
-/** 차례 시작: 카드 쓰기 또는 굴리기 */
+/** 차례 시작: 카드 쓰기 또는 돌림판 돌리기 */
 function chooseAction(data) {
   return new Promise((resolve, reject) => {
     G.reject = reject;
-    renderPanel({ roll: true });
-    setMsg(data.cards.some((c) => c.ok) ? "카드를 쓰거나, 주사위를 굴려요!" : "주사위를 굴려요!");
-    const panel = $("#hud");
+    renderPanel();
+    Wheel.show(12, wheelBadge(G.s.players[data.who]), false);
+    Wheel.enable(true);
+    setMsg(data.cards.some((c) => c.ok) ? "카드를 쓰거나, 돌림판을 돌려요!" : "돌림판을 돌려요!");
+    const panel = $("#hud"), hub = $("#rollBtn");
     const usable = new Set(data.cards.filter((c) => c.ok).map((c) => c.id));
     $$(".mini-card[data-card]", panel).forEach((b) => b.classList.toggle("usable", usable.has(b.dataset.card)));
     G.actionWait = true;
-    const done = (v) => { G.actionWait = false; G.reject = null; panel.removeEventListener("click", h, true); $("#rollBtn") && ($("#rollBtn").disabled = true); resolve(v); };
+    const done = (v) => { G.actionWait = false; G.reject = null; panel.removeEventListener("click", h, true); hub.onclick = null; Wheel.enable(false); resolve(v); };
+    hub.onclick = () => { SFX.pop(); Voice.unlock(); done("roll"); };
     const h = async (e) => {
-      if (e.target.closest("#rollBtn")) { e.stopPropagation(); SFX.pop(); Voice.unlock(); return done("roll"); }
       const c = e.target.closest(".mini-card[data-card]");
       if (!c) return;
       e.stopPropagation();
@@ -1008,6 +1098,18 @@ function chooseAction(data) {
     };
     panel.addEventListener("click", h, true);
     if (TEST && window.__T && window.__T.auto) setTimeout(() => done(window.__T.auto("action", data)), 0);
+  });
+}
+/** 카드를 쓴 뒤 돌림판 누르기 */
+function chooseSpin(data) {
+  return new Promise((resolve, reject) => {
+    G.reject = reject;
+    Wheel.show(12, wheelBadge(G.s.players[data.who]), false);
+    Wheel.enable(true);
+    setMsg("이제 돌림판을 돌려요!");
+    const hub = $("#rollBtn");
+    hub.onclick = () => { SFX.pop(); hub.onclick = null; G.reject = null; Wheel.enable(false); resolve(true); };
+    if (TEST && window.__T && window.__T.auto) setTimeout(() => hub.onclick && hub.onclick(), 0);
   });
 }
 /** 팬텀: 판 위에서 칸 고르기 */
@@ -1357,7 +1459,7 @@ async function finishGame(s) {
   <div class="result">
     <div class="podium">
       <div class="win-bg"></div>
-      <div class="champ">${trainerHTML(w, "huge")}<h1>${esc(w.name)} 우승!</h1><p>${s.mode}칸 · ${s.round}라운드 · 퀴즈 ${s.quizzes}문제 · 로켓단 포획 ${s.captures}번</p></div>
+      <div class="champ">${trainerHTML(w, "huge")}<h1>${esc(w.name)} ${s.solo ? "골인!" : "우승!"}</h1><p>${s.mode}칸 · ${s.round}라운드 · 퀴즈 ${s.quizzes}문제 · 로켓단 포획 ${s.captures}번</p></div>
     </div>
     <div class="res-list">
       ${rank.map(({ p }, k) => {

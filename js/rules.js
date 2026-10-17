@@ -23,7 +23,7 @@
   // ---------- 맵 (plan §8.2 · §8.3 테스트 시안 그대로) ----------
   const MAPS = {
     100: {
-      goal: 100, dice: 2, rocketStart: 15, checkpoints: [51], // 주사위 2개 (2026-10-17 사용자 요청: 1개는 루즈함)
+      goal: 100, dice: 1, rocketStart: 15, checkpoints: [51], // 돌림판 1번 (1~12, 2026-10-17 사용자 요청)
       ladders: { 4: 16, 13: 31, 22: 40, 35: 53, 47: 65, 59: 78, 71: 89, 82: 96 },
       slides: { 19: 8, 33: 17, 46: 29, 62: 44, 79: 58, 94: 74 },
       quiz: [6, 11, 18, 26, 32, 39, 49, 56, 67, 73, 84, 91],
@@ -32,7 +32,7 @@
       regions: ["town", "forest"],
     },
     200: {
-      goal: 200, dice: 2, rocketStart: 25, checkpoints: [51, 101, 151],
+      goal: 200, dice: 1, rocketStart: 25, checkpoints: [51, 101, 151],
       ladders: { 5: 24, 17: 39, 29: 52, 44: 70, 58: 83, 73: 99, 86: 112, 101: 129, 116: 143, 132: 155, 147: 172, 160: 183, 176: 194, 187: 198 },
       slides: { 27: 12, 42: 21, 63: 45, 78: 55, 95: 74, 110: 88, 127: 103, 145: 120, 163: 139, 178: 151, 190: 166, 197: 180 },
       quiz: [8, 14, 23, 34, 40, 48, 54, 66, 76, 81, 91, 98, 107, 114, 124, 135, 141, 153, 158, 169, 175, 182, 191, 195],
@@ -47,11 +47,11 @@
   // keep: ability = 능력 칸(2) · held = 일반 칸(1) · now = 뽑자마자
   const CARDS = {
     P01: { cat: "ability", keep: "ability", poke: 25, who: "피카츄", name: "번개 질주", text: "내 말이 6칸 앞으로!" },
-    P02: { cat: "ability", keep: "ability", poke: 4, who: "파이리", name: "불꽃 추진", text: "이번에 주사위를 1개 더 굴려요" },
+    P02: { cat: "ability", keep: "ability", poke: 4, who: "파이리", name: "불꽃 추진", text: "이번에 돌림판을 한 번 더 돌려요" },
     P03: { cat: "ability", keep: "ability", poke: 7, who: "꼬부기", name: "물방울 보호막", text: "로켓단에게 잡힐 때 1번 막아요", react: true },
     P04: { cat: "ability", keep: "ability", poke: 1, who: "이상해씨", name: "덩굴 채찍", text: "상대 3칸 뒤로, 나는 3칸 앞으로", target: true },
     P05: { cat: "ability", keep: "ability", poke: 94, who: "팬텀", name: "그림자 이동", text: "앞으로 15칸 안, 원하는 칸으로 슝" },
-    P06: { cat: "ability", keep: "ability", poke: 143, who: "잠만보", name: "길막기", text: "상대의 다음 주사위 이동 -6칸", target: true },
+    P06: { cat: "ability", keep: "ability", poke: 143, who: "잠만보", name: "길막기", text: "상대의 다음 이동 -6칸", target: true },
     P07: { cat: "ability", keep: "ability", poke: 133, who: "이브이", name: "행운의 발견", text: "카드 2장을 보고 1장 골라요" },
     P08: { cat: "ability", keep: "ability", poke: 54, who: "고라파덕", name: "혼란의 파동", text: "로켓단이 1~12칸 앞이나 뒤로 휘청!" },
     P09: { cat: "ability", keep: "ability", poke: 39, who: "푸린", name: "자장가", text: "반반 확률로 상대가 다음 턴 쿨쿨", target: true },
@@ -59,20 +59,20 @@
 
     R01: { cat: "rocket", keep: "now", icon: 0, name: "로켓단 출동", text: "로켓단이 고른 방향으로 6칸!" },
     R02: { cat: "rocket", keep: "now", icon: 1, name: "로켓단 급습", text: "고른 사람의 3칸 앞이나 뒤에 펑!" },
-    R03: { cat: "rocket", keep: "now", icon: 2, name: "로켓단 폭주", text: "다음 로켓단 턴에 주사위를 두 번" },
+    R03: { cat: "rocket", keep: "now", icon: 2, name: "로켓단 폭주", text: "다음 로켓단 턴에 돌림판을 두 번" },
     R04: { cat: "rocket", keep: "now", icon: 3, name: "로켓단 후퇴", text: "로켓단 10칸 뒤로" },
     R05: { cat: "rocket", keep: "now", icon: 4, name: "로켓단 휴식", text: "로켓단 다음 턴은 쉬어요" },
     R06: { cat: "rocket", keep: "now", icon: 5, name: "로켓단 소환", text: "로켓단이 가장 가까운 로켓단 칸으로" },
     R07: { cat: "rocket", keep: "now", icon: 6, name: "방향 전환", text: "로켓단 다음 이동은 반대 방향" },
     R08: { cat: "rocket", keep: "held", icon: 7, name: "로켓단 탈출", text: "잡힐 때 1번 쏙 빠져나가요", react: true },
 
-    E01: { cat: "event", keep: "held", icon: 0, name: "한 번 더!", text: "주사위를 굴린 뒤 다시 굴릴 수 있어요" },
+    E01: { cat: "event", keep: "held", icon: 0, name: "한 번 더!", text: "돌림판을 돌린 뒤 한 번 더 돌릴 수 있어요" },
     E02: { cat: "event", keep: "now", icon: 1, name: "로켓 발사", text: "바로 10칸 앞으로!" },
     E03: { cat: "event", keep: "now", icon: 2, name: "자리 바꾸기", text: "고른 사람과 자리를 바꿔요", target: true },
     E04: { cat: "event", keep: "now", icon: 3, name: "사다리 발견", text: "앞에 있는 가장 가까운 사다리로" },
     E05: { cat: "event", keep: "now", icon: 4, name: "미끄럼 사고", text: "앗! 5칸 뒤로" },
     E06: { cat: "event", keep: "now", icon: 5, name: "보물상자", text: "능력 카드 1장을 받아요" },
-    E07: { cat: "event", keep: "held", icon: 6, name: "행운의 숫자", text: "주사위 1개의 눈을 직접 골라요" },
+    E07: { cat: "event", keep: "held", icon: 6, name: "행운의 숫자", text: "돌림판 숫자를 직접 골라요" },
     E08: { cat: "event", keep: "now", icon: 7, name: "길이 막혔다", text: "내 다음 이동 -2칸" },
     E09: { cat: "event", keep: "now", icon: 8, name: "순간이동", text: "바로 8칸 앞으로!" },
     E10: { cat: "event", keep: "now", icon: 9, name: "안전지대", text: "다음 로켓단 턴까지 안 잡혀요" },
@@ -82,11 +82,18 @@
   const ABILITY_IDS = Object.keys(CARDS).filter((k) => CARDS[k].cat === "ability");
   const ROCKET_IDS = Object.keys(CARDS).filter((k) => CARDS[k].cat === "rocket");
   const ALL_IDS = Object.keys(CARDS);
+  // 혼자하기에선 걸 상대가 없는 카드 (덩굴채찍·길막기·자장가·슬쩍하기·자리바꾸기)
+  const SOLO_SKIP = ["P04", "P06", "P09", "P10", "E03"];
+  const abilityPool = (s) => (s.solo ? ABILITY_IDS.filter((k) => !SOLO_SKIP.includes(k)) : ABILITY_IDS);
 
   const RULES = {
     abilitySlots: 2, heldSlots: 1,
     kick: 8,            // 포획 처리 뒤 로켓단 튕겨내기
     capturePenalty: 5,  // 탈출 실패
+    exactFinish: true,  // 결승은 딱 맞아야 (넘치면 그 자리) — 2026-10-17 사용자 요청
+    spin: 12,           // 사람 돌림판 1~12 (영어 One~Twelve) — 주사위 대신 (2026-10-17 사용자 요청)
+    rocketSpin: 8,      // 로켓단 돌림판 1~8
+    stomp: 10,          // 다른 캐릭터가 서 있는 칸에 멈추면 밟힌 쪽이 10칸 뒤로 (예전: 내가 넘어서 한 칸 앞)
     regroupGap: 20, regroupBehind: 6,
     bonusEvery: 3,      // 개인 3번째 턴마다 보너스 퀴즈
     reward: { first: 3, hint: 2, bonus: 1, challenge: 12 },
@@ -101,7 +108,9 @@
   }
   const rint = (s, a, b) => a + Math.floor(rnd(s) * (b - a + 1));
   // s.force: 시험용 — 주사위 눈을 미리 정해 둔다 (저장되는 판에는 없다)
-  const d6 = (s) => (s.force && s.force.length ? s.force.shift() : rint(s, 1, 6));
+  const spinOf = (s, max) => (s.force && s.force.length ? s.force.shift() : rint(s, 1, max));
+  const spin = (s) => spinOf(s, RULES.spin);
+  const rocketSpin = (s) => spinOf(s, RULES.rocketSpin);
   function shuffle(s, arr) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(rnd(s) * (i + 1));
@@ -159,7 +168,7 @@
     const map = MAPS[opts.mode];
     const s = {
       v: 1, mode: opts.mode, goal: map.goal, rng: (opts.seed >>> 0) || 1,
-      round: 1, turn: 0, phase: "players", winner: null, quizzes: 0, captures: 0,
+      round: 1, turn: 0, phase: "players", winner: null, quizzes: 0, captures: 0, solo: opts.players.length === 1,
       players: opts.players.map((p) => ({
         name: p.name, trainer: p.trainer, adult: !!p.adult,
         math: p.math || 3, en: p.en || 2,
@@ -177,10 +186,11 @@
     s.deck = shuffle(s, ALL_IDS.concat(ALL_IDS));
   }
   function drawFromDeck(s, exclude) {
+    const skip = (exclude || []).concat(s.solo ? SOLO_SKIP : []);
     for (let guard = 0; guard < 200; guard++) {
       if (!s.deck.length) refillDeck(s);
       const id = s.deck.pop();
-      if (!exclude || !exclude.includes(id)) return id;
+      if (!skip.includes(id)) return id;
     }
     return "E02";
   }
@@ -235,16 +245,21 @@
    *  o.chute(기본 true) 사다리·미끄럼틀 1회, o.capture(기본 true) 로켓단과 같은 칸이면 포획
    *  → { rode, captured }
    */
-  /** 다른 캐릭터가 서 있는 칸이면 넘어서 한 칸 앞으로 (출발 1번 칸·결승은 같이 있어도 된다) */
+  /** 다른 캐릭터가 서 있는 칸인지 (출발 1번 칸·결승은 같이 있어도 된다) */
   function occupied(s, pi, n, ignore) {
     return n > 1 && n < s.goal && s.players.some((q, i) => i !== pi && i !== ignore && q.pos === n);
   }
-  async function hopOver(s, io, pi, ignore) {
+  /** 밟기: 내가 멈춘 칸에 있던 캐릭터는 10칸 뒤로 (그 칸에도 누가 있으면 더 뒤 빈칸, 장치·포획 없음) */
+  async function stomp(s, io, pi, ignore) {
     const p = s.players[pi];
-    while (occupied(s, pi, p.pos, ignore)) {
-      const over = s.players.findIndex((q, i) => i !== pi && i !== ignore && q.pos === p.pos);
-      p.pos++;
-      await io.show({ type: "hop", who: pi, over, from: p.pos - 1, to: p.pos });
+    for (let vi = 0; vi < s.players.length; vi++) {
+      const q = s.players[vi];
+      if (vi === pi || vi === ignore || q.pos !== p.pos || p.pos <= 1 || p.pos >= s.goal) continue;
+      const from = q.pos;
+      let to = Math.max(1, from - RULES.stomp);
+      while (to > 1 && s.players.some((x, i) => i !== vi && x.pos === to)) to--;
+      q.pos = to;
+      await io.show({ type: "stomp", who: pi, victim: vi, from, to });
     }
   }
 
@@ -252,9 +267,14 @@
     o = o || {};
     const p = s.players[pi];
     const from = p.pos;
+    if (RULES.exactFinish && to > s.goal) {
+      // 결승을 넘으면 못 들어가고 그 자리 (딱 맞아야 한다)
+      await io.show({ type: "over", who: pi, need: s.goal - from, want: to - from });
+      return { rode: false, captured: false, blocked: true };
+    }
     p.pos = clampPlayer(s, to);
     await io.show({ type: "move", who: pi, from, to: p.pos, via: o.via || "card" });
-    await hopOver(s, io, pi, o.ignore);
+    await stomp(s, io, pi, o.ignore);
     if (p.pos >= s.goal) { await win(s, io, pi); return { rode: false, captured: false }; }
     let rode = false;
     if (o.chute !== false) {
@@ -265,8 +285,7 @@
         rode = true;
         await io.show({ type: "chute", who: pi, kind: c.kind, from: at, to: c.to });
         if (p.pos >= s.goal) { await win(s, io, pi); return { rode, captured: false }; }
-        await hopOver(s, io, pi, o.ignore); // 도착 칸에도 누가 있으면 넘는다 (장치는 다시 안 탐)
-        if (p.pos >= s.goal) { await win(s, io, pi); return { rode, captured: false }; }
+        await stomp(s, io, pi, o.ignore); // 사다리·미끄럼틀 도착 칸에 누가 있어도 밟는다
       }
     }
     await checkRegroup(s, io);
@@ -365,7 +384,8 @@
     } else if (res === "first") {
       const pick = await io.choose("reward", { who: pi, move: RULES.reward.first });
       if (pick === "card") {
-        const id = ABILITY_IDS[rint(s, 0, ABILITY_IDS.length - 1)];
+        const pool = abilityPool(s);
+        const id = pool[rint(s, 0, pool.length - 1)];
         await io.show({ type: "draw", who: pi, card: id, from: "reward" });
         await gainCard(s, io, pi, id);
       } else await step(RULES.reward.first, "first");
@@ -414,6 +434,7 @@
       case "E09": await placePlayer(s, io, pi, p.pos + 8, { via: "card" }); break;
       case "E05": await placePlayer(s, io, pi, p.pos - 5, { via: "card" }); break;
       case "E03": {
+        if (!others(s, pi).length) { await io.show({ type: "nothing", who: pi, card: id }); break; }
         const t = await io.choose("target", { who: pi, card: id, options: others(s, pi) });
         const q = s.players[t];
         const a = p.pos, b = q.pos;
@@ -429,7 +450,8 @@
         break;
       }
       case "E06": {
-        const nid = ABILITY_IDS[rint(s, 0, ABILITY_IDS.length - 1)];
+        const pool = abilityPool(s);
+        const nid = pool[rint(s, 0, pool.length - 1)];
         await io.show({ type: "draw", who: pi, card: nid, from: "chest" });
         await gainCard(s, io, pi, nid);
         break;
@@ -444,7 +466,7 @@
         break;
       }
       case "R02": {
-        const t = await io.choose("target", { who: pi, card: id, options: others(s, pi) });
+        const t = await io.choose("target", { who: pi, card: id, options: others(s, pi).length ? others(s, pi) : [pi] });
         const dir = await io.choose("direction", { who: pi, card: id, n: 3, target: t });
         await teleportRocket(s, io, s.players[t].pos + (dir < 0 ? -3 : 3), "ambush");
         break;
@@ -526,7 +548,7 @@
       case "P06": {
         const t = await pickTarget();
         s.players[t].st.minus6 = true;
-        await io.show({ type: "status", who: t, st: "minus6", by: pi });
+        await io.show({ type: "status", who: pi, target: t, st: "minus6" });
         return {};
       }
       case "P07": await pickOneOfTwo(s, io, pi, 0); return {};
@@ -556,7 +578,7 @@
       }
       case "E07": {
         const v = await io.choose("lucky", { who: pi });
-        return { lucky: Math.max(1, Math.min(6, v | 0 || 6)) };
+        return { lucky: Math.max(1, Math.min(RULES.spin, v | 0 || RULES.spin)) };
       }
     }
     return {};
@@ -565,11 +587,13 @@
   // ---------- 주사위 ----------
   function rollDice(s, n, lucky) {
     const dice = [];
-    for (let i = 0; i < n; i++) dice.push(d6(s));
+    for (let i = 0; i < n; i++) dice.push(spin(s));
     if (lucky) dice[0] = lucky;
     return dice;
   }
   function baseDice(s) { return MAPS[s.mode].dice; }
+  /** 이번 차례 주사위 개수 (화면 미리보기용) */
+  function diceFor() { return 1; } // 돌림판은 늘 한 번 (파이리 카드만 두 번)
 
   // ---------- 칸 이벤트 ----------
   async function cellEvent(s, io, pi) {
@@ -613,6 +637,7 @@
       if (s.winner != null) return;
       extraDie = r.extraDie || 0;
       lucky = r.lucky || null;
+      await io.choose("spin", { who: pi }); // 카드를 쓴 뒤에도 아이가 돌림판을 직접 누른다
     }
     // 2) 주사위
     const n = baseDice(s) + extraDie;
@@ -635,7 +660,7 @@
       const res = await placePlayer(s, io, pi, p.pos + move, { via: "dice" });
       if (s.winner != null) return;
       // 주사위로 멈춘 칸만 이벤트 (사다리·미끄럼틀 도착 칸·포획 뒤에는 없음)
-      if (!res.rode && !res.captured) await cellEvent(s, io, pi);
+      if (!res.rode && !res.captured && !res.blocked) await cellEvent(s, io, pi);
     }
     if (s.winner != null) return;
     // 4) 정기 보너스 퀴즈
@@ -656,7 +681,7 @@
       const t = rocketTarget(s);
       let dir = s.players[t].pos >= r.pos ? 1 : -1;
       if (r.reverse) { dir = -dir; r.reverse = false; }
-      const rolls = r.double ? [d6(s), d6(s)] : [d6(s)];
+      const rolls = r.double ? [rocketSpin(s), rocketSpin(s)] : [rocketSpin(s)];
       r.double = false;
       s.lastRocket = { target: t, dir, rolls };
       await io.show({ type: "rocket-dice", target: t, dir, dice: rolls });
@@ -685,7 +710,7 @@
   const API = {
     TRAINERS, MAPS, REGION_NAMES, CARDS, ABILITY_IDS, ROCKET_IDS, ALL_IDS, RULES,
     cellType, chuteAt, validateMap, cellXY, createGame, distance, danger, rocketTarget,
-    usableCards, cardsOf, step, playerTurn, rocketTurn, placePlayer, moveRocket, teleportRocket,
+    usableCards, cardsOf, step, diceFor, SOLO_SKIP, playerTurn, rocketTurn, placePlayer, moveRocket, teleportRocket,
     captureGroup, resolveCard, useCard, gainCard, cellEvent, rollDice, rnd, rint,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = API;

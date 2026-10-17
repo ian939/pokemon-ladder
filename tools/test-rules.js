@@ -52,46 +52,58 @@ function game(mode, n) {
   eq(R.validateMap(R.MAPS[200]), [], "200칸 맵 검사");
   eq(R.cellXY(1), { row: 0, col: 0 }, "1번 칸 위치");
   eq(R.cellXY(11), { row: 1, col: 9 }, "11번 칸 지그재그");
-  eq(R.MAPS[100].dice, 2, "100칸 주사위 2개 (사용자 요청)");
-  eq(R.MAPS[200].dice, 2, "200칸 주사위 2개");
+  eq(R.RULES.spin, 12, "사람 돌림판 1~12 (사용자 요청)");
+  eq(R.RULES.rocketSpin, 8, "로켓단 돌림판 1~8 (사용자 요청)");
 
   // --- 주사위 개수 ---
   for (const mode of [100, 200]) {
     const s = game(mode); s.players[0].pos = 50; s.rocket.pos = mode - 1;
     const io = makeIO(); await R.playerTurn(s, io);
     const d = io.log.find((e) => e.type === "dice");
-    eq(d.dice.length, 2, mode + "칸 플레이어 주사위 2개");
+    eq(d.dice.length, 1, mode + "칸 돌림판 한 번");
+    ok(d.dice[0] >= 1 && d.dice[0] <= 12, "돌림판 1~12");
     const s2 = game(mode); s2.players.forEach((p) => (p.pos = 2)); s2.rocket.pos = 60;
     const io2 = makeIO(); await R.rocketTurn(s2, io2);
-    eq(io2.log.find((e) => e.type === "rocket-dice").dice.length, 1, mode + "칸 로켓단 주사위 1개");
+    eq(io2.log.find((e) => e.type === "rocket-dice").dice.length, 1, mode + "칸 로켓단 돌림판 한 번");
+  }
+  {
+    const seen = new Set(), seenR = new Set();
+    for (let i = 0; i < 3000; i++) {
+      const s = game(100); s.rng = i * 31 + 7; s.players[0].pos = 30;
+      const io = makeIO(); await R.playerTurn(s, io); seen.add(io.log.find((e) => e.type === "dice").dice[0]);
+      const s2 = game(100); s2.rng = i * 17 + 3; s2.players.forEach((p) => (p.pos = 2)); s2.rocket.pos = 60;
+      const io2 = makeIO(); await R.rocketTurn(s2, io2); seenR.add(io2.log.find((e) => e.type === "rocket-dice").dice[0]);
+    }
+    eq([...seen].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "사람 돌림판: 1~12 모두 나옴");
+    eq([...seenR].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8], "로켓단 돌림판: 1~8 모두 나옴");
   }
 
   // --- 잠만보: 100칸 주사위 2 → -4 ---
   {
-    const s = game(100); s.players[0].pos = 50; s.players[0].st.minus6 = true; s.force = [1, 1];
+    const s = game(100); s.players[0].pos = 50; s.players[0].st.minus6 = true; s.force = [2];
     const io = makeIO(); await R.playerTurn(s, io);
     eq(s.players[0].pos, 46 === 46 ? R.MAPS[100].slides[46] : 46, "잠만보 100칸 합 2 → -4 (46은 미끄럼틀 → 29)");
     ok(io.log.some((e) => e.type === "move" && e.from === 50 && e.to === 46), "잠만보 -4 실제 뒤로 이동");
     ok(!s.players[0].st.minus6, "잠만보 상태 한 번만");
   }
   {
-    const s = game(100); s.players[0].pos = 50; s.players[0].st.minus6 = true; s.force = [1, 3];
+    const s = game(100); s.players[0].pos = 50; s.players[0].st.minus6 = true; s.force = [4];
     await R.playerTurn(s, makeIO()); eq(s.players[0].pos, 48, "잠만보 4 → -2");
-    const s2 = game(100); s2.players[0].pos = 50; s2.players[0].st.minus6 = true; s2.force = [3, 3];
+    const s2 = game(100); s2.players[0].pos = 50; s2.players[0].st.minus6 = true; s2.force = [6];
     const io2 = makeIO(); await R.playerTurn(s2, io2); eq(s2.players[0].pos, 50, "잠만보 6 → 0");
     ok(has(io2, "stay"), "0칸이면 제자리");
     ok(!io2.log.some((e) => e.type === "cell"), "0칸이면 칸 이벤트 없음");
   }
   // 잠만보: 200칸 합 9 → +3, 합 12 → +6
   {
-    const s = game(200); s.players[0].pos = 100; s.players[0].st.minus6 = true; s.force = [4, 5];
+    const s = game(200); s.players[0].pos = 100; s.players[0].st.minus6 = true; s.force = [9];
     await R.playerTurn(s, makeIO()); eq(s.players[0].pos, 103 === 103 ? 103 : 0, "잠만보 200칸 합 9 → +3");
-    const s2 = game(200); s2.players[0].pos = 100; s2.players[0].st.minus6 = true; s2.force = [6, 6];
+    const s2 = game(200); s2.players[0].pos = 100; s2.players[0].st.minus6 = true; s2.force = [12];
     await R.playerTurn(s2, makeIO()); eq(s2.players[0].pos, 106, "잠만보 200칸 합 12 → +6");
   }
   // 경계: 1 아래로 안 감
   {
-    const s = game(100); s.players[0].pos = 2; s.players[0].st.minus6 = true; s.force = [1, 1];
+    const s = game(100); s.players[0].pos = 2; s.players[0].st.minus6 = true; s.force = [1];
     await R.playerTurn(s, makeIO()); eq(s.players[0].pos, 1, "1번 칸 아래로 안 내려감");
   }
 
@@ -190,7 +202,7 @@ function game(mode, n) {
   }
   // 사다리 도착 칸은 연쇄·이벤트 없음 (4→16, 한 번만)
   {
-    const s = game(100); s.players[0].pos = 1; s.force = [1, 2];
+    const s = game(100); s.players[0].pos = 1; s.force = [3];
     const io = makeIO(); await R.playerTurn(s, io);
     eq(s.players[0].pos, 16, "주사위 3 → 4 사다리 → 16");
     eq(io.log.filter((e) => e.type === "chute").length, 1, "사다리 1회");
@@ -214,10 +226,10 @@ function game(mode, n) {
   {
     const s = game(100); s.players[0].pos = 50; s.players[0].ability = ["P02"]; s.rocket.pos = 99;
     const io = makeIO({ choices: { action: "P02" } }); await R.playerTurn(s, io);
-    eq(io.log.find((e) => e.type === "dice").dice.length, 3, "파이리 → 100칸 주사위 3개");
+    eq(io.log.find((e) => e.type === "dice").dice.length, 2, "파이리 → 돌림판 두 번");
     const s2 = game(200); s2.players[0].pos = 50; s2.players[0].ability = ["P02"];
     const io2 = makeIO({ choices: { action: "P02" } }); await R.playerTurn(s2, io2);
-    eq(io2.log.find((e) => e.type === "dice").dice.length, 3, "파이리 → 200칸 주사위 3개");
+    eq(io2.log.find((e) => e.type === "dice").dice.length, 2, "파이리 → 200칸도 두 번");
   }
   // 로켓단 폭주: 한 개씩 두 번
   {
@@ -243,20 +255,30 @@ function game(mode, n) {
     const s = game(100); s.rocket.pos = 97; s.players[0].pos = 98; s.players[1].pos = 98; s.force = [6];
     await R.rocketTurn(s, makeIO()); ok(s.rocket.pos <= 99, "로켓단은 99번까지");
   }
-  // 승리: 결승 초과도 승리
+  // 결승은 딱 맞아야 (2026-10-17 사용자 요청)
   {
-    const s = game(100); s.players[0].pos = 98; s.force = [3, 3];
-    await R.step(s, makeIO()); eq(s.winner, 0, "결승 초과 → 승리");
-    eq(s.players[0].pos, 100, "결승칸에 멈춤");
+    const s = game(100); s.players[0].pos = 98; s.force = [6];
+    const io = makeIO(); await R.step(s, io);
+    eq([s.winner, s.players[0].pos], [null, 98], "98에서 6 → 넘치니 그 자리");
+    ok(has(io, "over"), "넘침 안내");
+    const s2 = game(100); s2.players[0].pos = 98; s2.force = [2];
+    await R.step(s2, makeIO()); eq([s2.winner, s2.players[0].pos], [0, 100], "딱 2 → 골인");
+    const s3 = game(100); s3.players[0].pos = 99; s3.force = [1];
+    await R.step(s3, makeIO()); eq(s3.winner, 0, "99에서 One → 골인");
+    const s4 = game(100); s4.players[0].pos = 97; s4.players[0].ability = ["P01"];
+    await R.useCard(s4, makeIO(), 0, "P01");
+    eq([s4.players[0].pos, s4.winner], [97, null], "피카츄 +6 도 넘치면 못 감");
+    const s5 = game(100); s5.players[0].pos = 94; s5.players[0].ability = ["P01"];
+    await R.useCard(s5, makeIO(), 0, "P01"); eq(s5.winner, 0, "피카츄 +6 딱 100 → 골인");
   }
   // 재합류 (200칸 51)
   {
-    const s = game(200); s.rocket.pos = 10; s.players[0].pos = 45; s.players[1].pos = 2; s.force = [3, 3];
+    const s = game(200); s.rocket.pos = 10; s.players[0].pos = 45; s.players[1].pos = 2; s.force = [6];
     const io = makeIO(); await R.playerTurn(s, io);
     ok(has(io, "regroup"), "재합류 발생");
     eq(s.rocket.pos, s.players[0].pos - 6, "선두 6칸 뒤로 재합류");
     ok(!has(io, "capture"), "재합류는 포획 없음");
-    s.rocket.pos = 2; s.players[0].pos = 55; const io2 = makeIO(); s.force = [1, 1];
+    s.rocket.pos = 2; s.players[0].pos = 55; const io2 = makeIO(); s.force = [2];
     await R.playerTurn(s, io2); ok(!has(io2, "regroup"), "같은 체크포인트는 한 번만");
   }
   // 보관함 가득 → 버릴 카드 고르기
@@ -278,58 +300,84 @@ function game(mode, n) {
   }
   // 퀴즈 보상
   {
-    const s = game(100); s.players[0].pos = 1; s.force = [2, 3]; // 6 퀴즈 칸
+    const s = game(100); s.players[0].pos = 1; s.force = [5]; // 6 퀴즈 칸
     const io = makeIO({ quiz: ["first"], choices: { reward: "card" } }); await R.playerTurn(s, io);
     ok(s.players[0].ability.length === 1, "힌트 없이 정답 → 능력 카드 선택");
-    const s2 = game(100); s2.players[0].pos = 1; s2.force = [2, 3];
+    const s2 = game(100); s2.players[0].pos = 1; s2.force = [5];
     await R.playerTurn(s2, makeIO({ quiz: ["hint"] })); eq(s2.players[0].pos, 8, "힌트 후 정답 → +2");
-    const s3 = game(100); s3.players[0].pos = 1; s3.force = [2, 3];
+    const s3 = game(100); s3.players[0].pos = 1; s3.force = [5];
     await R.playerTurn(s3, makeIO({ quiz: ["first"], choices: { reward: "move" } })); eq(s3.players[0].pos, 9, "정답 +3 (9 = 카드 칸이지만 이벤트 없음)");
   }
   // 보너스 퀴즈: 3번째 턴, 이미 퀴즈 했으면 건너뜀, 한 턴 최대 1문제
   {
-    const s = game(100); s.players[0].pos = 49; s.players[0].turns = 2; s.force = [1, 1]; // 51 일반 칸
+    const s = game(100); s.players[0].pos = 49; s.players[0].turns = 2; s.force = [2]; // 51 일반 칸
     const io = makeIO(); await R.playerTurn(s, io);
     ok(io.log.some((e) => e.type === "quiz" && e.ctx.reason === "bonus"), "3번째 턴 보너스 퀴즈");
-    const s2 = game(100); s2.players[0].pos = 1; s2.players[0].turns = 2; s2.force = [2, 3]; // 6 퀴즈 칸
+    const s2 = game(100); s2.players[0].pos = 1; s2.players[0].turns = 2; s2.force = [5]; // 6 퀴즈 칸
     const io2 = makeIO({ quiz: ["fail"] }); await R.playerTurn(s2, io2);
     eq(io2.log.filter((e) => e.type === "quiz").length, 1, "퀴즈 칸 턴엔 보너스 건너뜀");
   }
 
-  // --- 같은 칸이면 넘어서 한 칸 앞으로 (2026-10-17 사용자 요청) ---
+  // --- 밟기: 다른 캐릭터가 선 칸에 멈추면 밟힌 쪽이 10칸 뒤로 (2026-10-17 사용자 요청) ---
   {
-    const s = game(100); s.players[0].pos = 50; s.players[1].pos = 53; s.force = [1, 2];
+    const s = game(100); s.players[0].pos = 50; s.players[1].pos = 53; s.force = [3];
     const io = makeIO(); await R.playerTurn(s, io);
-    eq(s.players[0].pos, 54, "53에 친구가 있으면 넘어서 54 (54는 카드 칸)");
-    ok(has(io, "hop"), "넘기 연출");
-    ok(io.log.some((e) => e.type === "cell" && e.cell === "card"), "넘어간 칸(54)의 칸 이벤트");
+    eq([s.players[0].pos, s.players[1].pos], [53, 43], "53에 멈춤 → 엄마는 43으로");
+    ok(io.log.some((e) => e.type === "stomp" && e.victim === 1 && e.from === 53 && e.to === 43), "밟기 연출");
   }
   {
-    const s = game(100, 3); s.players[0].pos = 50; s.players[1].pos = 52; s.players[2].pos = 53; s.force = [2];
+    const s = game(100, 3); s.players[0].pos = 50; s.players[1].pos = 53; s.players[2].pos = 43; s.force = [3];
     await R.playerTurn(s, makeIO());
-    eq(s.players[0].pos, 54, "두 명 연달아 있으면 둘 다 넘음 (52·53 → 54)");
+    eq(s.players[1].pos, 42, "10칸 뒤에도 누가 있으면 그 뒤 빈칸 (43 → 42)");
   }
   {
-    const s = game(100); s.players[0].pos = 10; s.players[1].pos = 12; s.force = [1, 1];
+    const s = game(100); s.players[0].pos = 50; s.players[1].pos = 54; s.force = [4];
+    const io = makeIO(); await R.playerTurn(s, io);
+    ok(io.log.some((e) => e.type === "cell" && e.cell === "card"), "밟은 사람은 그 칸(54 카드) 이벤트 그대로");
+    const s2 = game(100); s2.players[0].pos = 39; s2.players[1].pos = 45; s2.force = [6];
+    await R.playerTurn(s2, makeIO());
+    eq(s2.players[1].pos, 35, "밟혀서 간 칸(35 사다리 시작)은 장치를 타지 않음");
+  }
+  {
+    const s = game(100); s.players[0].pos = 10; s.players[1].pos = 31; s.force = [3];
     await R.playerTurn(s, makeIO());
-    eq(s.players[0].pos, 31, "넘어간 칸이 사다리 시작(13)이면 탐 → 31");
+    eq([s.players[0].pos, s.players[1].pos], [31, 21], "사다리 도착 칸(31)에 있던 상대도 밟힘");
   }
   {
     const s = game(100); s.players[0].pos = 1; s.players[1].pos = 1;
     eq(s.players.map((p) => p.pos), [1, 1], "출발 칸은 같이 있어도 됨");
-    const s2 = game(100); s2.players[0].pos = 96; s2.players[1].pos = 99; s2.force = [1, 2];
-    await R.step(s2, makeIO());
-    eq(s2.winner, 0, "99의 친구를 넘으면 결승 → 우승");
+    const s2 = game(100); s2.players[0].pos = 5; s2.players[1].pos = 7; s2.force = [2];
+    await R.playerTurn(s2, makeIO()); eq(s2.players[1].pos, 1, "10칸 뒤가 1보다 작으면 출발 칸");
   }
   {
     const s = game(100); s.players[0].pos = 30; s.players[1].pos = 40;
     await R.resolveCard(s, makeIO({ choices: { target: 1 } }), 0, "E03", 0);
-    eq([s.players[0].pos, s.players[1].pos], [40, 30], "자리 바꾸기는 넘지 않고 그대로 맞바꿈");
+    eq([s.players[0].pos, s.players[1].pos], [40, 30], "자리 바꾸기는 밟지 않고 그대로 맞바꿈");
   }
+
+  // --- 혼자하기 (2026-10-17 사용자 요청) ---
   {
-    const s = game(100); s.players[0].pos = 50; s.players[1].pos = 53; s.players[0].ability = ["P04"];
-    await R.useCard(s, makeIO(), 0, "P04");
-    eq([s.players[0].pos, s.players[1].pos], [53, 51], "이상해씨: 상대 53→50(내가 있어 넘어 51), 나 50→53");
+    const s = R.createGame({ mode: 100, seed: 5, players: [{ name: "지온이", trainer: "ash" }] });
+    ok(s.solo, "한 명이면 혼자하기");
+    let bad = 0;
+    const io = makeIO();
+    for (let i = 0; i < 300; i++) { await R.cellEvent(Object.assign(s, { players: [Object.assign(s.players[0], { pos: 9, ability: [], held: null })] }), io, 0); }
+    io.log.filter((e) => e.type === "draw").forEach((e) => { if (R.SOLO_SKIP.includes(e.card)) bad++; });
+    eq(bad, 0, "혼자하기 카드 더미엔 상대에게 거는 카드 없음");
+    const s2 = R.createGame({ mode: 100, seed: 6, players: [{ name: "지온이", trainer: "ash" }] }); s2.rocket.pos = 50;
+    const io2 = makeIO(); await R.resolveCard(s2, io2, 0, "E03", 0);
+    ok(has(io2, "nothing") && !has(io2, "choose:target"), "혼자하기 자리 바꾸기 → 아무 일 없음");
+    const io3 = makeIO(); await R.resolveCard(s2, io3, 0, "R02", 0);
+    ok(io3.log.find((e) => e.type === "choose:target").data.options.join() === "0", "혼자하기 급습 → 나에게");
+    let done = 0;
+    for (let g = 0; g < 300; g++) {
+      const t = R.createGame({ mode: 100, seed: g + 1, players: [{ name: "지온이", trainer: "ash" }] });
+      const tio = makeIO(); tio.quiz = async () => "first";
+      let guard = 0;
+      while (t.winner == null && guard++ < 2000) { await R.step(t, tio); tio.log.length = 0; }
+      if (t.winner === 0 && t.players[0].pos === 100) done++;
+    }
+    eq(done, 300, "혼자하기 300판 모두 딱 100 골인으로 끝남");
   }
 
   // --- 무작위 판 수천 개: 무한 루프·이상한 값 없음 ---

@@ -50,7 +50,7 @@ def collect():
     R.TRAINERS.forEach(t => { ko.add(t.name); ko.add(t.partnerName); });
     Object.values(R.CARDS).forEach(c => { ko.add(c.name); ko.add(c.text); });
     for (let i = 1; i <= 36; i++) ko.add(String(i));
-    const en = new Set(E.speechTexts());
+    const en = new Set(E.speechTexts()); V.EN_WORDS.forEach(w => en.add(w));
     E.BANK.forEach(b => (b.choices || []).forEach(c => { if (/^[A-Za-z][A-Za-z ,.'!?]+$/.test(c) && c.length > 1) en.add(c); }));
     console.log(JSON.stringify({ ko: [...ko], en: [...en] }));
     """

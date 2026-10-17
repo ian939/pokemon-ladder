@@ -33,8 +33,8 @@ function mulberry(seed) {
 }
 const pct = (arr, p) => arr.slice().sort((a, b) => a - b)[Math.floor(arr.length * p)];
 (async () => {
-  for (const mode of [100, 200]) {
-    for (const np of [2, 3, 4]) {
+  for (const mode of [100]) { // 200칸은 숨김
+    for (const np of [1, 2, 3, 4]) {
       const rounds = [], quizPP = [], caps = [], firstWin = [0, 0];
       for (let g = 0; g < N; g++) {
         const players = R.TRAINERS.slice(0, np).map((t) => ({ name: t.name, trainer: t.id }));

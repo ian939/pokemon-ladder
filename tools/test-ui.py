@@ -133,14 +133,14 @@ def play(pg, label, max_steps=6000, wrong_every=4, shots=True):
             pg.locator(".cell.selectable").last.click()
             seen["cell"] += 1
             continue
-        rb = pg.locator("#rollBtn:not([disabled])")
+        rb = pg.locator("#rollBtn.ready")
         if rb.count():
             try:
                 rb.click(timeout=1500)
             except Exception:
                 continue
             seen["roll"] += 1
-            d = pg.evaluate("() => document.querySelectorAll('#dice .die3d').length")
+            d = pg.evaluate("() => document.querySelectorAll('#wheelDisc .wedge').length")
             seen["dice"].add(d)
             continue
         pg.wait_for_timeout(25)
@@ -176,6 +176,7 @@ def main():
         pg.screenshot(path=str(OUT / "01-title.png"))
         touch_targets(pg, "처음 화면")
         pg.click("text=새 모험")
+        check(pg.locator("text=200칸").count() == 0, "200칸은 숨김 (100칸만)")
         pg.screenshot(path=str(OUT / "02-setup.png"))
         touch_targets(pg, "준비 화면")
         pg.click("text=모험 출발")
@@ -187,7 +188,7 @@ def main():
         touch_targets(pg, "판 화면 1180×820")
         seen = play(pg, "g100")
         check(pg.locator(".screen-result").count() == 1, f"100칸 판 끝까지 → 우승 화면 ({seen['sec']}초, 주사위 {seen['roll']}번, 퀴즈 {seen['quiz']}문제, 고르기 {seen['modal']}번)")
-        check(seen["dice"] == {2}, f"100칸 주사위 2개 화면 ({seen['dice']})")
+        check(seen["dice"] == {12}, f"사람 돌림판 12칸 ({seen['dice']})")
         check(seen["wrong"] > 0, "틀린 답 경로도 지나감")
         pg.screenshot(path=str(OUT / "04-result100.png"))
         touch_targets(pg, "우승 화면")
@@ -199,9 +200,9 @@ def main():
 
         # ---------- 2. 200칸 3명 ----------
         pg = page(1366, 1024)
-        pg.goto(base + "/index.html?test&seed=11")
+        pg.goto(base + "/index.html?test&seed=11&200")
         pg.click("text=새 모험")
-        pg.click("text=200칸")
+        pg.click("[data-a=mode][data-v='200']")
         pg.click("text=한 명 더")
         pg.click("text=모험 출발")
         pg.wait_for_selector("#board .cell")
@@ -211,7 +212,7 @@ def main():
         check(sc[0] > sc[1] * 1.5, f"200칸은 판이 화면보다 길다 → 카메라가 따라감 ({sc})")
         seen = play(pg, "g200")
         check(pg.locator(".screen-result").count() == 1, f"200칸 판 끝까지 ({seen['sec']}초, 주사위 {seen['roll']}번, 퀴즈 {seen['quiz']}문제)")
-        check(2 in seen["dice"], f"200칸 주사위 2개 화면 ({seen['dice']})")
+        check(seen["dice"] == {12}, f"200칸도 돌림판 12칸 ({seen['dice']})")
         kinds = {k.split(':')[0] for k in seen["kinds"]}
         check({"choice", "input", "order"} <= kinds, f"퀴즈 형식 여러 가지 ({sorted(seen['kinds'])})")
         pg.screenshot(path=str(OUT / "05-result200.png"))
@@ -222,7 +223,7 @@ def main():
         pg.goto(base + "/index.html?test&seed=3")
         pg.click("text=새 모험")
         pg.click("text=모험 출발")
-        pg.wait_for_selector("#rollBtn:not([disabled])")
+        pg.wait_for_selector("#rollBtn.ready")
         pg.evaluate("""() => { let made = false; Learn.pick = (pl, rec, used, r) => { for (;;) { const q = MathQ.make('M23', r); if (q.mul.a === 7 && q.mul.b === 4) return q; } };
           window.__TEST_SLOW_EXPLAIN = true; window.__T.Quiz.run(0, { reason: 'cell' }).then(r => window.__qres = r); }""")
         pg.wait_for_selector("#qzBody [data-k=key]")
@@ -288,8 +289,8 @@ def main():
           window.__msgs = []; const o = window.setMsg; window.setMsg = (t) => { window.__msgs.push(t); o(t); };
           window.__hop = 0; Rules.placePlayer(s, window.__T.IO, 0, 53, { via: 'dice' }).then(() => window.__hop = 1); }""")
         pg.wait_for_function("() => window.__hop")
-        check(pg.evaluate("() => window.__T.G.s.players[0].pos") == 54, "화면: 친구 칸(53)에 오면 넘어서 54")
-        check(any("엄마를 넘어서 한 칸 앞으로" in m for m in pg.evaluate("() => window.__msgs")), "화면: 넘기 안내 글 (엄마를 넘어서…)")
+        check(pg.evaluate("() => [window.__T.G.s.players[0].pos, window.__T.G.s.players[1].pos]") == [53, 43], "화면: 엄마 칸(53)에 멈추면 엄마는 43으로")
+        check(any("엄마를 밟았다" in m for m in pg.evaluate("() => window.__msgs")), "화면: 밟기 안내 글 (지온이가 엄마를 밟았다)")
         pg.close()
 
         # ---------- 4. 이어하기 ----------
@@ -297,15 +298,19 @@ def main():
         pg.goto(base + "/index.html?test&seed=21")
         pg.click("text=새 모험")
         pg.click("text=모험 출발")
-        play(pg, "resume", max_steps=60, shots=False)
-        pg.wait_for_selector("#rollBtn:not([disabled])")
-        st = pg.evaluate("() => { const d = document.querySelector('#dice'); return [d.classList.contains('idle'), d.classList.contains('rocket'), d.children.length, window.__T.G.s.round]; }")
-        check(st[0] and not st[1] and st[2] == 2 and st[3] > 1, f"로켓단 차례 뒤 내 차례: 흰 '?' 주사위 2개로 초기화 ({st})")
+        play(pg, "resume", max_steps=14, shots=False)
+        pg.wait_for_selector("#rollBtn.ready")
+        st = pg.evaluate("""() => { const w = document.querySelector('#wheelStage'); const s = window.__T.G.s;
+          return [w.classList.contains('hidden'), w.classList.contains('rocket'), document.querySelectorAll('#wheelDisc .wedge').length,
+            document.querySelector('#wheelBadge').textContent.includes(s.players[s.turn].name), s.round, document.querySelector('#spinResult b').textContent]; }""")
+        check(not st[0] and not st[1] and st[2] == 12 and st[3] and st[4] > 1 and st[5] == "?", f"로켓단 차례 뒤 내 차례: 판 가운데 12칸 돌림판 + 왼쪽 위에 내 이름 + 결과 '?' ({st})")
+        words = pg.eval_on_selector_all("#wheelDisc .wword", "els => els.map(e => e.textContent)")
+        check(words == ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"], "돌림판 글자 = One~Twelve")
         before = pg.evaluate("() => { const s = window.__T.G.s; return [s.turn, s.round, s.players.map(p => p.pos), s.rocket.pos]; }")
         pg.goto(base + "/index.html?test&seed=21")
         check(pg.locator("text=이어하기").count() == 1, "새로고침 뒤 처음 화면에 '이어하기'")
         pg.click("text=이어하기")
-        pg.wait_for_selector("#rollBtn:not([disabled])")
+        pg.wait_for_selector("#rollBtn.ready")
         after = pg.evaluate("() => { const s = window.__T.G.s; return [s.turn, s.round, s.players.map(p => p.pos), s.rocket.pos]; }")
         check(before == after, f"이어하기 = 같은 차례·위치 ({before} / {after})")
         # 크기별 화면
@@ -316,8 +321,8 @@ def main():
             pg.wait_for_timeout(150)
             pg.screenshot(path=str(OUT / f"08-size-{w}x{h}.png"))
             touch_targets(pg, nm)
-            vis = pg.evaluate("() => { const r = document.querySelector('#rollBtn').getBoundingClientRect(); return r.bottom <= innerHeight + 1 && r.top >= 0; }")
-            check(vis or w < 500, f"{nm}: 굴리기 버튼이 화면 안")
+            vis = pg.evaluate("() => { const r = document.querySelector('#rollBtn').getBoundingClientRect(); return r.bottom <= innerHeight + 1 && r.top >= 0 && r.width >= 44; }")
+            check(vis, f"{nm}: 돌림판 가운데 버튼이 화면 안")
         pg.close()
 
         # ---------- 5. 새 버전 감지 ----------
@@ -357,6 +362,59 @@ def main():
         pg.fill("#wipeIn", "초기화")
         pg.click("[data-a=wipe]")
         check(pg.locator(".pr").count() == 0, "'초기화' 쓰면 지워짐")
+        pg.close()
+
+        # ---------- 8. 카드 잔뜩: 매 차례 능력 카드를 쥐여 주고 쓰게 한다 (길막기 에러 같은 화면 연결 실수 잡기) ----------
+        pg = page(1180, 820)
+        pg.goto(base + "/index.html?test&seed=31")
+        pg.click("text=새 모험")
+        pg.click("text=한 명 더")
+        pg.click("text=모험 출발")
+        pg.wait_for_selector("#board .cell")
+        pg.evaluate("""() => {
+          const T = window.__T, ids = Rules.ALL_IDS; let k = 0; window.__used = {};
+          T.auto = (kind, d) => {
+            const s = T.G.s;
+            if (kind === 'action') {
+              s.players.forEach(p => { while (p.ability.length < 2) p.ability.push(Rules.ABILITY_IDS[(k++) % 10]); if (!p.held) p.held = ['E01','E07','R08'][k % 3]; });
+              const u = d.cards.filter(c => c.ok); if (u.length) { const c = u[k % u.length].id; window.__used[c] = 1; return c; } return 'roll';
+            }
+            if (kind === 'target') return d.options[k % d.options.length];
+            if (kind === 'direction') return k % 2 ? 1 : -1;
+            if (kind === 'cell') return d.to;
+            if (kind === 'pick') return k % 2;
+            if (kind === 'discard') return d.add;
+            if (kind === 'reward') return k % 2 ? 'card' : 'move';
+            if (kind === 'reroll') return true;
+            if (kind === 'lucky') return 3;
+            if (kind === 'defend') return d.options[0];
+            return null;
+          };
+          T.autoQuiz = async () => ['first', 'hint', 'explained', 'fail'][(k++) % 4];
+        }""")
+        n0 = len(errors)
+        pg.click("#rollBtn")  # 자동 조작을 켜기 전에 이미 기다리던 첫 차례
+        pg.wait_for_selector(".screen-result", timeout=240000)
+        used = pg.evaluate("() => Object.keys(window.__used).sort()")
+        check(len(errors) == n0, f"카드를 계속 쓰는 판: 화면 오류 없이 끝까지 ({errors[n0:n0 + 2]})")
+        check({"P01", "P02", "P04", "P05", "P06", "P07", "P08", "P09", "P10", "E07"} <= set(used), f"능동 카드 10종 + 행운의 숫자 모두 써 봄 ({used})")
+        pg.close()
+
+        # ---------- 9. 혼자하기 ----------
+        pg = page(1180, 820)
+        pg.goto(base + "/index.html?test&seed=41")
+        pg.click("text=새 모험")
+        pg.click("text=혼자 하기")
+        check(pg.locator(".pl").count() == 1 and pg.locator("text=한 명 더").count() == 0, "혼자 하기 → 한 명만")
+        pg.screenshot(path=str(OUT / "10-solo-setup.png"))
+        pg.click("text=모험 출발")
+        seen = play(pg, "solo", shots=False)
+        check(pg.locator(".screen-result").count() == 1 and "골인" in pg.inner_text(".champ h1"), f"혼자하기 끝까지 → 골인 화면 ({seen['sec']}초, 주사위 {seen['roll']}번)")
+        pg.screenshot(path=str(OUT / "11-solo-result.png"))
+        pg.click("text=처음으로")
+        pg.click("text=새 모험")
+        pg.click("text=같이 하기")
+        check(pg.locator(".pl").count() >= 2, "같이 하기로 돌아오면 2명 이상")
         pg.close()
 
         # ---------- 7. 목소리 녹음 ----------

@@ -13,7 +13,9 @@
     ladder: "사다리다! 위로 올라가요!",
     slide: "미끄럼틀이다! 슈우욱!",
     stay: "제자리에 멈췄어요.",
-    hop: "친구를 넘어서 한 칸 앞으로!",
+    stomp: "밟혔다! 열 칸 뒤로!",
+    over: "딱 맞아야 들어갈 수 있어요! 그 자리에 있어요.",
+    solo: "혼자서 로켓단을 피해 골인해 봐요!",
     cellQuiz: "퀴즈 칸이에요!",
     cellCard: "카드 칸이에요! 카드를 뽑아요.",
     cellRocket: "로켓단 칸이에요!",
@@ -63,8 +65,10 @@
     listen: "잘 들어 봐요.",
   };
   // 이름 조각 (프로필에서 고를 수 있는 이름)
+  // 돌림판 영어 (One~Twelve)
+  const EN_WORDS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
   const NAMES = ["지온이", "엄마", "아빠", "할머니", "할아버지", "이모", "삼촌", "친구", "형", "누나", "언니", "동생"];
-  const API = { L, NAMES };
+  const API = { L, NAMES, EN_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else root.VoiceLines = API;
 })(typeof window !== "undefined" ? window : globalThis);
