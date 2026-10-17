@@ -82,6 +82,8 @@ ANSWER_JS = """(wrong) => {
     body.querySelector('[data-k=key][data-v=ok]').click(); return 'input';
   }
   if (q.kind === 'order') {
+    // 틀린 답 직후 다음 문제가 그려지기 전의 짧은 틈이면 다음에 다시
+    if ([...body.querySelectorAll('[data-k=tok]')].some(t => t.disabled)) return 'busy';
     const want = wrong ? ans.slice().reverse() : ans;
     if (wrong && want.join() === ans.join()) { want.push(want.shift()); }
     for (const w of want) {
@@ -111,6 +113,9 @@ def play(pg, label, max_steps=6000, wrong_every=4, shots=True):
                     pg.screenshot(path=str(OUT / f"{label}-quiz.png"))
                     shot_quiz = True
                 r = pg.evaluate(ANSWER_JS, wrong)
+                if r == "busy":
+                    pg.wait_for_timeout(30)
+                    continue
                 seen["quiz"] += 1
                 if wrong:
                     seen["wrong"] += 1
@@ -214,7 +219,7 @@ def main():
         check(pg.locator(".screen-result").count() == 1, f"200칸 판 끝까지 ({seen['sec']}초, 주사위 {seen['roll']}번, 퀴즈 {seen['quiz']}문제)")
         check(seen["dice"] == {12}, f"200칸도 돌림판 12칸 ({seen['dice']})")
         kinds = {k.split(':')[0] for k in seen["kinds"]}
-        check({"choice", "input", "order"} <= kinds, f"퀴즈 형식 여러 가지 ({sorted(seen['kinds'])})")
+        check({"choice", "input"} <= kinds, f"퀴즈 형식 여러 가지 ({sorted(seen['kinds'])}) — 배열은 3번에서 따로")
         pg.screenshot(path=str(OUT / "05-result200.png"))
         pg.close()
 
@@ -291,6 +296,15 @@ def main():
         pg.wait_for_function("() => window.__hop")
         check(pg.evaluate("() => [window.__T.G.s.players[0].pos, window.__T.G.s.players[1].pos]") == [53, 43], "화면: 엄마 칸(53)에 멈추면 엄마는 43으로")
         check(any("엄마를 밟았다" in m for m in pg.evaluate("() => window.__msgs")), "화면: 밟기 안내 글 (지온이가 엄마를 밟았다)")
+
+        # 퀴즈 보상 +1~+3 이 화면에 보인다 (2026-10-17 사용자 요청)
+        pg.evaluate("""() => { window.__msgs = []; window.__rp = null; const o = window.setMsg; window.setMsg = (t) => { window.__msgs.push(t); o(t); };
+          new MutationObserver(() => { const w = document.querySelector('.rp.win'); if (w) window.__rp = [w.textContent, document.querySelector('#rpRes').textContent]; })
+            .observe(document.body, { subtree: true, childList: true, attributes: true });
+          window.__done = 0; window.__T.IO.show({ type: 'reward', who: 0, move: 2, why: 'hint' }).then(() => window.__done = 1); }""")
+        pg.wait_for_function("() => window.__done")
+        rp = pg.evaluate("() => window.__rp")
+        check(rp and rp[0] == "+2" and "+2칸" in rp[1] and "Two" in rp[1], f"퀴즈 보상: +1·+2·+3 중 +2 에 멈추고 '+2칸! Two!' 표시 ({rp})")
         pg.close()
 
         # ---------- 4. 이어하기 ----------

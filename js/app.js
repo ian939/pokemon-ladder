@@ -949,7 +949,7 @@ const IO = {
       case "reward":
         if (e.why === "stamp") { setMsg(`⭐ ${L.stamp}`); say(L.stamp); await sleep(500); }
         else if (e.why === "challenge-miss") { setMsg(L.challengeMiss); say(L.challengeMiss); }
-        else { setMsg(`👟 ${nm(e.who)} +${e.move}칸!`); await sleep(400); }
+        else await rewardPop(e.who, e.move, e.why);
         break;
       case "nothing": setMsg(L.nothing); say(L.nothing); await sleep(400); break;
       case "bonus-quiz": setMsg(`⭐ ${L.bonus}`); say(L.bonus); await sleep(300); break;
@@ -1063,7 +1063,7 @@ const IO = {
       case "reward": {
         say(L.rewardPick);
         const d = layer("modal", `<div class="win-box pick-box reward"><h2>🎉 ${esc(L.great)}</h2>
-          <div class="row"><button class="btn big primary" data-v="card">🃏 능력 카드 받기</button><button class="btn big" data-v="move">👟 ${data.move}칸 앞으로</button></div></div>`);
+          <div class="row"><button class="btn big primary" data-v="card">🃏 능력 카드 받기</button><button class="btn big" data-v="move">🎲 ${data.min}~${data.max}칸 앞으로</button></div></div>`);
         const v = await waitPick(d); d.remove(); return v;
       }
       case "reroll": {
@@ -1237,6 +1237,29 @@ async function revealCard(who, id, from) {
   say(c.name, c.text);
   if (TEST && !window.__TEST_SLOW_EXPLAIN) { await sleep(10); d.remove(); return; }
   await waitPick(d);
+  d.remove();
+}
+/** 퀴즈 보상 이동: +1 · +2 · +3 이 번갈아 깜빡이다가 하나에 멈춘다 (2026-10-17 사용자 요청) */
+async function rewardPop(who, n, why) {
+  const p = G.s.players[who];
+  if (why === "challenge") { setMsg(`💡 ${p.name}: 퀴즈 도전 성공! +${n}칸!`); await sleep(500); return; }
+  const d = layer("reward-pop", `<div class="win-box"><div class="rp-title">${trainerHTML(p, "sm")} ${esc(p.name)} 앞으로!</div>
+    <div class="rp-row">${[1, 2, 3].map((k) => `<span class="rp" data-k="${k}">+${k}</span>`).join("")}</div>
+    <div class="rp-res" id="rpRes">두근두근…</div></div>`);
+  const cells = $$(".rp", d);
+  const steps = TEST ? 1 : 10 + n;
+  for (let i = 0; i < steps; i++) {
+    cells.forEach((c) => c.classList.toggle("on", +c.dataset.k === (i % 3) + 1));
+    SFX.step();
+    await sleep(70 + i * 12);
+  }
+  cells.forEach((c) => c.classList.toggle("on", +c.dataset.k === n));
+  cells.forEach((c) => c.classList.toggle("win", +c.dataset.k === n));
+  $("#rpRes", d).innerHTML = `<b>+${n}칸!</b> <span>${WORDS[n]}!</span>`;
+  setMsg(`🎁 ${p.name} +${n}칸 (${WORDS[n]})!`);
+  SFX.good();
+  sayEn(WORDS[n]);
+  await sleep(900);
   d.remove();
 }
 async function coinFlip(ok) {

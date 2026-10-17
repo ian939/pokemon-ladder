@@ -23,7 +23,7 @@
   // ---------- 맵 (plan §8.2 · §8.3 테스트 시안 그대로) ----------
   const MAPS = {
     100: {
-      goal: 100, dice: 1, rocketStart: 15, checkpoints: [51], // 돌림판 1번 (1~12, 2026-10-17 사용자 요청)
+      goal: 100, dice: 1, rocketStart: 15, checkpoints: [], // 돌림판 1번 (1~12). 재합류 없음 (2026-10-17 사용자 요청: 로켓단 순간이동은 억울)
       ladders: { 4: 16, 13: 31, 22: 40, 35: 53, 47: 65, 59: 78, 71: 89, 82: 96 },
       slides: { 19: 8, 33: 17, 46: 29, 62: 44, 79: 58, 94: 74 },
       quiz: [6, 11, 18, 26, 32, 39, 49, 56, 67, 73, 84, 91],
@@ -32,7 +32,7 @@
       regions: ["town", "forest"],
     },
     200: {
-      goal: 200, dice: 1, rocketStart: 25, checkpoints: [51, 101, 151],
+      goal: 200, dice: 1, rocketStart: 25, checkpoints: [], // 재합류 없음
       ladders: { 5: 24, 17: 39, 29: 52, 44: 70, 58: 83, 73: 99, 86: 112, 101: 129, 116: 143, 132: 155, 147: 172, 160: 183, 176: 194, 187: 198 },
       slides: { 27: 12, 42: 21, 63: 45, 78: 55, 95: 74, 110: 88, 127: 103, 145: 120, 163: 139, 178: 151, 190: 166, 197: 180 },
       quiz: [8, 14, 23, 34, 40, 48, 54, 66, 76, 81, 91, 98, 107, 114, 124, 135, 141, 153, 158, 169, 175, 182, 191, 195],
@@ -96,7 +96,7 @@
     stomp: 10,          // 다른 캐릭터가 서 있는 칸에 멈추면 밟힌 쪽이 10칸 뒤로 (예전: 내가 넘어서 한 칸 앞)
     regroupGap: 20, regroupBehind: 6,
     bonusEvery: 3,      // 개인 3번째 턴마다 보너스 퀴즈
-    reward: { first: 3, hint: 2, bonus: 1, challenge: 12 },
+    reward: { min: 1, max: 3, challenge: 12 }, // 퀴즈 정답 이동 = +1~+3 무작위 (2026-10-17 사용자 요청), 퀴즈 도전 카드만 +12
   };
 
   // ---------- 난수 (mulberry32, 상태는 s.rng) ----------
@@ -385,24 +385,25 @@
     const res = await askQuiz(s, io, pi, reason);
     const p = s.players[pi];
     const step = async (n, why) => {
+      if (n == null) n = spinOf(s, RULES.reward.max - RULES.reward.min + 1) + RULES.reward.min - 1; // +1~+3
       await io.show({ type: "reward", who: pi, move: n, why });
       await placePlayer(s, io, pi, p.pos + n, { via: "reward" });
     };
     if (reason === "bonus") {
-      if (res === "first" || res === "hint") await step(RULES.reward.bonus, "bonus");
+      if (res === "first" || res === "hint") await step(null, "bonus");
     } else if (reason === "challenge") {
       if (res === "first" || res === "hint") await step(RULES.reward.challenge, "challenge");
       else await io.show({ type: "reward", who: pi, move: 0, why: "challenge-miss" });
     } else if (res === "first") {
-      const pick = await io.choose("reward", { who: pi, move: RULES.reward.first });
+      const pick = await io.choose("reward", { who: pi, min: RULES.reward.min, max: RULES.reward.max });
       if (pick === "card") {
         const pool = abilityPool(s);
         const id = pool[rint(s, 0, pool.length - 1)];
         await io.show({ type: "draw", who: pi, card: id, from: "reward" });
         await gainCard(s, io, pi, id);
-      } else await step(RULES.reward.first, "first");
+      } else await step(null, "first");
     } else if (res === "hint") {
-      await step(RULES.reward.hint, "hint");
+      await step(null, "hint");
     } else if (res === "explained") {
       await io.show({ type: "reward", who: pi, move: 0, why: "stamp" });
     }

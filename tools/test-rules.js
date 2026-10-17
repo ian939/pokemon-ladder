@@ -286,15 +286,11 @@ function game(mode, n) {
     const s5 = game(100); s5.players[0].pos = 94; s5.players[0].ability = ["P01"];
     await R.useCard(s5, makeIO(), 0, "P01"); eq(s5.winner, 0, "피카츄 +6 딱 100 → 골인");
   }
-  // 재합류 (200칸 51)
+  // 재합류 없음 (2026-10-17 사용자 요청)
   {
-    const s = game(200); s.rocket.pos = 10; s.players[0].pos = 45; s.players[1].pos = 2; s.force = [6];
+    const s = game(100); s.rocket.pos = 10; s.players[0].pos = 45; s.players[1].pos = 2; s.force = [6];
     const io = makeIO(); await R.playerTurn(s, io);
-    ok(has(io, "regroup"), "재합류 발생");
-    eq(s.rocket.pos, s.players[0].pos - 6, "선두 6칸 뒤로 재합류");
-    ok(!has(io, "capture"), "재합류는 포획 없음");
-    s.rocket.pos = 2; s.players[0].pos = 55; const io2 = makeIO(); s.force = [2];
-    await R.playerTurn(s, io2); ok(!has(io2, "regroup"), "같은 체크포인트는 한 번만");
+    ok(!has(io, "regroup") && s.rocket.pos === 10, "선두가 51을 넘어도 로켓단은 순간이동 안 함");
   }
   // 보관함 가득 → 버릴 카드 고르기
   {
@@ -318,10 +314,17 @@ function game(mode, n) {
     const s = game(100); s.players[0].pos = 1; s.force = [5]; // 6 퀴즈 칸
     const io = makeIO({ quiz: ["first"], choices: { reward: "card" } }); await R.playerTurn(s, io);
     ok(s.players[0].ability.length === 1, "힌트 없이 정답 → 능력 카드 선택");
-    const s2 = game(100); s2.players[0].pos = 1; s2.force = [5];
-    await R.playerTurn(s2, makeIO({ quiz: ["hint"] })); eq(s2.players[0].pos, 8, "힌트 후 정답 → +2");
-    const s3 = game(100); s3.players[0].pos = 1; s3.force = [5];
-    await R.playerTurn(s3, makeIO({ quiz: ["first"], choices: { reward: "move" } })); eq(s3.players[0].pos, 9, "정답 +3 (9 = 카드 칸이지만 이벤트 없음)");
+    const s2 = game(100); s2.players[0].pos = 1; s2.force = [5, 2];
+    await R.playerTurn(s2, makeIO({ quiz: ["hint"] })); eq(s2.players[0].pos, 8, "힌트 후 정답 → 무작위 +2");
+    const s3 = game(100); s3.players[0].pos = 1; s3.force = [5, 3];
+    await R.playerTurn(s3, makeIO({ quiz: ["first"], choices: { reward: "move" } })); eq(s3.players[0].pos, 9, "정답 → 무작위 +3 (9 = 카드 칸이지만 이벤트 없음)");
+    const got = new Set();
+    for (let i = 0; i < 600; i++) {
+      const t = game(100); t.rng = i * 13 + 1; t.players[0].pos = 1; t.force = [5];
+      const io = makeIO({ quiz: [["first", "hint"][i % 2]], choices: { reward: "move" } }); await R.playerTurn(t, io);
+      const e = io.log.find((x) => x.type === "reward"); got.add(e.move);
+    }
+    eq([...got].sort(), [1, 2, 3], "퀴즈 보상 이동은 +1~+3 무작위 (모두 나옴)");
   }
   // 보너스 퀴즈: 3번째 턴, 이미 퀴즈 했으면 건너뜀, 한 턴 최대 1문제
   {
