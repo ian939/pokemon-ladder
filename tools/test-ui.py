@@ -459,6 +459,21 @@ def main():
         check(not cpu_learn, f"컴퓨터 퀴즈는 학습 기록에 안 들어감 ({cpu_learn})")
         pg.close()
 
+        # 같이 → 혼자 → 같이 로 판을 바꿔도 돌림판이 그려진다 (투명 돌림판 버그)
+        pg = page(1180, 820)
+        pg.goto(base + "/index.html?test&seed=71")
+        wedges = []
+        for mode in ("같이 하기", "혼자 하기", "같이 하기"):
+            if pg.locator("[data-p=home]").count():
+                pg.click("[data-p=home]")
+            pg.click("text=새 모험")
+            pg.click("text=" + mode)
+            pg.click("text=모험 출발")
+            pg.wait_for_selector("#rollBtn.ready")
+            wedges.append(pg.evaluate("() => document.querySelectorAll('#wheelDisc .wedge').length"))
+        check(wedges == [12, 12, 12], f"같이→혼자→같이 로 바꿔도 돌림판 12칸이 그려짐 ({wedges})")
+        pg.close()
+
         # ---------- 11. 로켓단이 먼저 도착 → 승자 없음 ----------
         pg = page(1180, 820)
         pg.goto(base + "/index.html?test&seed=61")

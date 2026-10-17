@@ -761,7 +761,9 @@ const Wheel = {
   show(n, badge, rocket) {
     const st = $("#wheelStage");
     if (!st) return;
-    if (this.n !== n || this.rocket !== !!rocket) this.build(n, !!rocket);
+    // 판을 새로 시작하면 돌림판 자리가 비어 있다 → 칸 수가 같아도 다시 그린다 (친구↔혼자 오갈 때 투명해지던 버그)
+    const disc = $("#wheelDisc");
+    if (this.n !== n || this.rocket !== !!rocket || !disc || !disc.querySelector("svg")) this.build(n, !!rocket);
     st.classList.remove("hidden");
     st.classList.toggle("rocket", !!rocket);
     $("#wheelBadge").innerHTML = badge;
