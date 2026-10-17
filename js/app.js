@@ -442,7 +442,7 @@ function renderBoardScreen() {
       <div class="msg" id="msg"><span id="msgText">${esc(L.title)}</span></div>
     </aside>
   </div>`, "screen-game mode-" + s.mode);
-  setDice(G.lastDice || [1, 1]);
+  if (G.lastDice) setDice(G.lastDice); else idleDice(R.MAPS[s.mode].dice, s.phase === "rocket");
   layoutBoard();
   drawBoard(map);
   renderPanel();
@@ -713,12 +713,19 @@ function setDice(dice, rocket) {
   box.innerHTML = dice.map(dieHTML).join("");
   $$(".die3d", box).forEach((d, i) => { const [x, y] = DIE_TURN[dice[i]]; d.firstChild.style.transform = `rotateX(${x - 12}deg) rotateY(${y + 14}deg)`; });
 }
+/** 차례가 바뀌면 지난 눈·색을 지우고 "?" 주사위로 (사용자 제보: 로켓단 뒤에 빨간 주사위가 남아 있음) */
+function idleDice(n, rocket) {
+  setDice(Array(n).fill(1), rocket);
+  const box = $("#dice");
+  if (box) { box.classList.add("idle"); box.classList.remove("landed"); }
+  G.lastDice = null;
+}
 async function rollAnim(dice, rocket) {
   const box = $("#dice");
   if (!box) return;
   if (box.children.length !== dice.length || box.classList.contains("rocket") !== !!rocket) setDice(dice.map(() => 1), rocket);
   SFX.dice();
-  box.classList.remove("landed");
+  box.classList.remove("landed", "idle");
   $$(".die3d", box).forEach((d, i) => {
     const [x, y] = DIE_TURN[dice[i]];
     d.dataset.v = dice[i];
@@ -755,6 +762,7 @@ const IO = {
     switch (e.type) {
       case "turn":
         G.current = e.who;
+        idleDice(R.MAPS[s.mode].dice, false);
         renderPanel();
         focusCell(P(e.who).pos);
         setMsg(`${nm(e.who)}의 차례!`);
@@ -854,6 +862,7 @@ const IO = {
         await animateMove("R", e.from, e.to, "warp"); break;
       case "rocket-turn":
         G.current = -1;
+        idleDice(1, true);
         renderPanel();
         focusCell(s.rocket.pos);
         setMsg(`👿 ${L.rocketTurn}`);

@@ -299,6 +299,8 @@ def main():
         pg.click("text=모험 출발")
         play(pg, "resume", max_steps=60, shots=False)
         pg.wait_for_selector("#rollBtn:not([disabled])")
+        st = pg.evaluate("() => { const d = document.querySelector('#dice'); return [d.classList.contains('idle'), d.classList.contains('rocket'), d.children.length, window.__T.G.s.round]; }")
+        check(st[0] and not st[1] and st[2] == 2 and st[3] > 1, f"로켓단 차례 뒤 내 차례: 흰 '?' 주사위 2개로 초기화 ({st})")
         before = pg.evaluate("() => { const s = window.__T.G.s; return [s.turn, s.round, s.players.map(p => p.pos), s.rocket.pos]; }")
         pg.goto(base + "/index.html?test&seed=21")
         check(pg.locator("text=이어하기").count() == 1, "새로고침 뒤 처음 화면에 '이어하기'")

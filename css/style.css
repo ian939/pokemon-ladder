@@ -280,6 +280,11 @@ img { image-rendering: pixelated; }
 .dice.tumbling .die3d { animation: tumble .9s ease-out; }
 @keyframes tumble { 0% { transform: translateY(-26px); } 35% { transform: translateY(6px); } 55% { transform: translateY(-8px); } 75% { transform: translateY(2px); } 100% { transform: none; } }
 .dice.landed .die3d { filter: drop-shadow(0 6px 4px rgba(0, 0, 0, .35)); }
+/* 아직 안 굴린 주사위: 눈 대신 "?" */
+.dice.idle .face i { visibility: hidden; }
+.dice.idle .face::after { content: "?"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: calc(var(--d) * .6); font-weight: 700; color: #b9ad94; }
+.dice.rocket.idle .face::after { color: #ffd0d0; }
 
 .hand .slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .mini-card { min-height: 78px; border: 3px solid var(--wood-d); border-radius: 10px; background: var(--cream); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px; font-size: 12px; font-weight: 700; line-height: 1.15; text-align: center; word-break: keep-all; }
