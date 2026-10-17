@@ -83,6 +83,7 @@
   const ROCKET_IDS = Object.keys(CARDS).filter((k) => CARDS[k].cat === "rocket");
   const ALL_IDS = Object.keys(CARDS);
   // 혼자하기에선 걸 상대가 없는 카드 (덩굴채찍·길막기·자장가·슬쩍하기·자리바꾸기)
+  const HELD_IDS = Object.keys(CARDS).filter((k) => CARDS[k].keep === "held");
   const SOLO_SKIP = ["P04", "P06", "P09", "P10", "E03"];
   const abilityPool = (s) => (s.solo ? ABILITY_IDS.filter((k) => !SOLO_SKIP.includes(k)) : ABILITY_IDS);
 
@@ -397,7 +398,8 @@
     } else if (res === "first") {
       const pick = await io.choose("reward", { who: pi, min: RULES.reward.min, max: RULES.reward.max });
       if (pick === "card") {
-        const pool = abilityPool(s);
+        // 능력 카드 + 일반 카드(한 번 더·행운의 숫자·로켓단 탈출) 중 한 장 (2026-10-17 사용자 확정 B안)
+        const pool = abilityPool(s).concat(HELD_IDS);
         const id = pool[rint(s, 0, pool.length - 1)];
         await io.show({ type: "draw", who: pi, card: id, from: "reward" });
         await gainCard(s, io, pi, id);
@@ -725,7 +727,7 @@
   const API = {
     TRAINERS, MAPS, REGION_NAMES, CARDS, ABILITY_IDS, ROCKET_IDS, ALL_IDS, RULES,
     cellType, chuteAt, validateMap, cellXY, createGame, distance, danger, rocketTarget,
-    usableCards, cardsOf, step, diceFor, SOLO_SKIP, playerTurn, rocketTurn, placePlayer, moveRocket, teleportRocket,
+    usableCards, cardsOf, step, diceFor, SOLO_SKIP, HELD_IDS, playerTurn, rocketTurn, placePlayer, moveRocket, teleportRocket,
     captureGroup, resolveCard, useCard, gainCard, cellEvent, rollDice, rnd, rint,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = API;

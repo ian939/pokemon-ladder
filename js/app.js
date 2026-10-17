@@ -1065,7 +1065,7 @@ const IO = {
       case "reward": {
         say(L.rewardPick);
         const d = layer("modal", `<div class="win-box pick-box reward"><h2>🎉 ${esc(L.great)}</h2>
-          <div class="row"><button class="btn big primary" data-v="card">🃏 능력 카드 받기</button><button class="btn big" data-v="move">🎲 ${data.min}~${data.max}칸 앞으로</button></div></div>`);
+          <div class="row"><button class="btn big primary" data-v="card">🃏 카드 받기</button><button class="btn big" data-v="move">🎲 ${data.min}~${data.max}칸 앞으로</button></div></div>`);
         const v = await waitPick(d); d.remove(); return v;
       }
       case "reroll": {
@@ -1228,7 +1228,7 @@ function chooseCell(data) {
 async function revealCard(who, id, from) {
   const c = R.CARDS[id];
   SFX.card();
-  const title = { deck: "카드를 뽑았다!", rocket: "로켓단 카드!", reward: "능력 카드를 받았다!", chest: "보물상자에서 나왔다!", pick: "이 카드로 결정!" }[from] || "카드!";
+  const title = { deck: "카드를 뽑았다!", rocket: "로켓단 카드!", reward: "카드를 받았다!", chest: "보물상자에서 나왔다!", pick: "이 카드로 결정!" }[from] || "카드!";
   const keep = c.keep === "now" ? "바로 써요!" : "보관함에 넣어요";
   const d = layer("modal card-modal reveal", `<h2 class="reveal-title">${esc(title)}</h2>
     <div class="card-flip"><div class="card-back"><img src="${IMG.tile("card")}" alt=""></div>${cardHTML(id, "big")}</div>

@@ -313,7 +313,15 @@ function game(mode, n) {
   {
     const s = game(100); s.players[0].pos = 1; s.force = [5]; // 6 퀴즈 칸
     const io = makeIO({ quiz: ["first"], choices: { reward: "card" } }); await R.playerTurn(s, io);
-    ok(s.players[0].ability.length === 1, "힌트 없이 정답 → 능력 카드 선택");
+    ok(s.players[0].ability.length + (s.players[0].held ? 1 : 0) === 1, "힌트 없이 정답 → 카드 받기");
+    const kinds = new Set();
+    for (let i = 0; i < 400; i++) {
+      const t = game(100); t.rng = i * 7 + 3; t.players[0].pos = 1; t.force = [5];
+      const io = makeIO({ quiz: ["first"], choices: { reward: "card" } }); await R.playerTurn(t, io);
+      const d = io.log.find((e) => e.type === "draw" && e.from === "reward"); kinds.add(R.CARDS[d.card].keep);
+      ok(R.CARDS[d.card].cat !== "event" || R.HELD_IDS.includes(d.card), "보상 카드는 능력 카드나 일반 카드만");
+    }
+    eq([...kinds].sort(), ["ability", "held"], "보상 카드에 일반 카드도 나옴 (B안)");
     const s2 = game(100); s2.players[0].pos = 1; s2.force = [5, 2];
     await R.playerTurn(s2, makeIO({ quiz: ["hint"] })); eq(s2.players[0].pos, 8, "힌트 후 정답 → 무작위 +2");
     const s3 = game(100); s3.players[0].pos = 1; s3.force = [5, 3];
