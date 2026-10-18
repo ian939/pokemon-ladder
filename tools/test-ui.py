@@ -491,33 +491,40 @@ def main():
         pg.screenshot(path=str(OUT / "14-rocket-win.png"))
         pg.close()
 
-        # ---------- 12. 판 끝 복습 (2분 → 시험은 4초) · 영어 차례 안내 ----------
+        # ---------- 12. 판 끝 복습 · 다 풀면 바로 · 도장 (시험: 60초) · 영어 차례 안내 ----------
         pg = page(1180, 820)
-        pg.goto(base + "/index.html?test&seed=81&review=4000")
+        pg.goto(base + "/index.html?test&seed=81&review=60000")
         pg.click("text=새 모험")
         pg.click("text=모험 출발")
         pg.wait_for_selector("#rollBtn.ready")
         check("Jion's turn!" in pg.inner_text("#turnBanner") or "Jion's turn!" in pg.inner_text("#msgText"), "차례 안내 영어: Jion's turn!")
         check(pg.evaluate("() => window.__T.enName('엄마')") == "Mom" and pg.evaluate("() => window.__T.enName('다온')") == "Daon", "영어 이름: 엄마 → Mom, 직접 쓴 이름 다온 → Daon")
-        pg.evaluate("() => { window.__T.autoQuiz = null; }")
         seen = play(pg, "review", shots=False, wrong_every=2)
         pg.wait_for_selector(".layer.review", timeout=10000)
         n_items = pg.evaluate("() => window.__T.Store.data.review.items.length")
-        check(n_items == seen["quiz"] - seen["wrong"] or n_items > 0, f"복습 창: 이번 판 문제 {n_items}개")
-        check(pg.locator(".rv-card").count() == n_items, f"복습 카드 = 푼 문제 수 ({pg.locator('.rv-card').count()})")
-        check(pg.locator("#rvDone").is_disabled(), "2분(시험 4초) 전에는 '다 봤어요' 잠김")
+        check(n_items > 0 and pg.locator(".rv-card").count() == n_items, f"복습 창: 이번 판 문제 {n_items}개 = 카드 수")
+        check(pg.locator("#rvDone").is_disabled(), "다 풀기 전·2분 전에는 '다음 게임' 잠김")
         pg.screenshot(path=str(OUT / "15-review.png"))
-        if pg.locator("[data-retry]").count():
+        n_wrong = pg.locator("[data-retry]").count()
+        for k in range(n_wrong):
             pg.locator("[data-retry]").first.click()
             pg.wait_for_selector(".practice #qzBody [data-k]")
             pg.evaluate(ANSWER_JS, False)
-            pg.wait_for_selector(".rv-card.fixed", timeout=5000)
-            check(True, "다시 풀기 → 맞히면 ✅ 표시")
-        pg.wait_for_function("() => !document.querySelector('#rvDone').disabled", timeout=10000)
+            pg.wait_for_function(f"() => document.querySelectorAll('.rv-card.fixed').length >= {k + 1}", timeout=8000)
+        stamps = pg.evaluate("() => window.__T.Store.data.stamps")
+        check(sum(stamps.values()) == n_wrong, f"다시 맞힌 만큼 도장 ({stamps}, {n_wrong}문제)")
+        check(not pg.locator("#rvDone").is_disabled(), "다시 볼 문제를 모두 다시 맞히면 2분 전이라도 '다음 게임' 열림")
+        pg.screenshot(path=str(OUT / "16-review-done.png"))
         pg.click("#rvDone")
-        check(pg.locator(".layer.review").count() == 0, "시간이 지나면 '다 봤어요'로 닫힘")
-        pg.click("text=처음으로")
-        check(pg.locator(".layer.review").count() == 0, "다 본 뒤엔 처음 화면으로 그냥 감")
+        check(pg.locator(".layer.review").count() == 0, "'다음 게임' 누르면 닫힘")
+        # 도장 3개 이상인 사람은 다음 판을 능력 카드 들고 출발
+        before = pg.evaluate("() => Object.assign({}, window.__T.Store.data.stamps)")
+        pg.click("text=한 판 더")
+        pg.wait_for_selector("#board .cell")
+        after = pg.evaluate("() => [window.__T.Store.data.stamps, window.__T.G.s.players.map(p => [p.name, p.ability.length])]")
+        for name, cards in after[1]:
+            if before.get(name, 0) >= 3:
+                check(cards == 1 and after[0][name] == before[name] - 3, f"{name}: 도장 3개 → 능력 카드 1장 들고 출발 (도장 {before[name]} → {after[0][name]})")
         pg.close()
 
         # ---------- 7. 목소리 녹음 ----------

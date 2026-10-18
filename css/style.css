@@ -643,3 +643,10 @@ img { image-rendering: pixelated; }
 .rv-foot { display: flex; align-items: center; gap: 12px; justify-content: center; padding: 10px 16px; border-top: 3px solid #3b2410; background: #fffdf6; }
 .rv-foot #rvDone { min-width: 300px; }
 .layer.quiz-layer.practice { z-index: 75; }
+
+.rv-stamps { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 18px; background: #fffbe6; border-bottom: 2px dashed #d8c9a8; font-size: 18px; }
+.rv-st { background: #fff; border: 2px solid #3b2410; border-radius: 12px; padding: 2px 10px; letter-spacing: 1px; }
+.rv-stamps small { font-size: 14px; color: #6b4a2a; }
+.rv-retry small { font-size: 13px; color: #b07a00; }
+
+body.has-review .toast { bottom: auto; top: 18px; z-index: 120; }

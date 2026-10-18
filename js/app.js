@@ -430,6 +430,17 @@ function startGame(setup) {
   s.players.forEach((p) => { p.qs = { n: 0, first: 0, hint: 0, explained: 0, fail: 0, math: 0, en: 0 }; p.lastSubj = p.adult ? "en" : "math"; });
   s.usedQ = [];
   s.started = Date.now();
+  // 복습 도장 3개 → 능력 카드 1장 들고 출발 (2026-10-18 사용자 확정)
+  const gifts = [];
+  Store.data.stamps = Store.data.stamps || {};
+  s.players.forEach((p) => {
+    if (p.cpu || (Store.data.stamps[p.name] || 0) < 3) return;
+    const pool = R.ABILITY_IDS.filter((id) => !s.solo || !R.SOLO_SKIP.includes(id));
+    p.ability.push(pool[Math.floor(Math.random() * pool.length)]);
+    Store.data.stamps[p.name] -= 3;
+    gifts.push(p.name);
+  });
+  if (gifts.length) setTimeout(() => { toast(`⭐ 도장 3개! ${gifts.join(", ")} 능력 카드를 들고 출발!`, 3000); say(L.stampGift); }, 600);
   Store.data.game = s;
   Store.save();
   say(s.solo ? L.solo : L.newGame);
@@ -1644,13 +1655,13 @@ function reviewCard(it, k, wrong) {
   const q = it.q, [ico, tag] = RES_TAG[it.res];
   const ans = Array.isArray(q.answer) ? q.answer.join(" ") : q.answer;
   const ansHTML = q.choiceType === "swatch" ? `<span class="sw" style="--sw:${EnQ.COLORS[ans] ? EnQ.COLORS[ans][0] : "#ccc"}"></span> ${esc(ans)}` : esc(ans) + (q.unit ? esc(q.unit) : "");
-  return `<article class="rv-card ${wrong ? "wrong" : "right"}" data-k="${k}">
+  return `<article class="rv-card ${wrong ? "wrong" : "right"} ${it.fixed ? "fixed" : ""}" data-k="${k}">
     <div class="rv-top">${trainerHTML({ trainer: it.trainer }, "sm")}<span class="rv-who">${esc(it.who)}</span>
       <span class="rv-chip ${q.subject}">${q.subject === "math" ? "수학" : "영어"} · ${esc(q.name)}</span><span class="rv-res">${ico} ${tag}</span></div>
     <p class="rv-q">${esc(q.prompt).replace(/\n/g, " ")}${q.expr ? ` <b>${esc(q.expr)}</b>` : ""}${q.picture ? ` <span class="rv-pic">${esc(q.picture)}</span>` : ""}</p>
     <div class="rv-ans">정답: <b>${ansHTML}</b>${q.subject === "en" && (q.say || q.sayAnswer) ? ` <button class="btn small rv-say" data-say="${esc(q.sayAnswer ? ans : q.say)}" aria-label="듣기">🔊</button>` : ""}</div>
     ${wrong ? `<ol class="rv-steps">${q.explain.map((t) => `<li>${esc(t)}</li>`).join("")}</ol>
-      <button class="btn rv-retry" data-retry="${k}">✏️ 다시 풀기</button><span class="rv-done"></span>` : ""}
+      ${it.fixed ? "" : `<button class="btn rv-retry" data-retry="${k}">✏️ 다시 풀기 <small>⭐ +1</small></button>`}<span class="rv-done">${it.fixed ? "✅ 다시 풀어서 맞혔어요! ⭐" : ""}</span>` : ""}
   </article>`;
 }
 function openReview() {
@@ -1664,6 +1675,7 @@ function openReview() {
   const d = layer("modal review", `<div class="win-box rv">
     <header class="rv-head"><h2>📚 이번 판 복습</h2><span class="rv-n">푼 문제 ${items.length}개</span><span class="rv-timer" id="rvTimer"></span></header>
     <div class="rv-sum">🌟 바로 ${cnt("first")} · 💡 힌트 ${cnt("hint")} · 📖 풀이 ${cnt("explained")} · 😢 못 풂 ${cnt("fail")}</div>
+    <div class="rv-stamps" id="rvStamps"></div>
     <div class="rv-body">
       ${wrong.length ? `<h3>🔁 다시 보면 좋은 문제 <small>(${wrong.length}) — 풀이를 읽고 다시 풀어 봐요!</small></h3>${wrong.map(([it, k]) => reviewCard(it, k, true)).join("")}` : `<h3>🎉 모두 한 번에 맞혔어요!</h3>`}
       ${right.length ? `<h3>✅ 맞힌 문제 <small>(${right.length})</small></h3><div class="rv-grid">${right.map(([it, k]) => reviewCard(it, k, false)).join("")}</div>` : ""}
@@ -1671,14 +1683,33 @@ function openReview() {
     <footer class="rv-foot"><button class="btn big primary" id="rvDone" disabled>⏳</button><button class="btn small ghost" id="rvSkip">🔒 어른이 넘기기</button></footer>
   </div>`);
   say(L.review);
+  document.body.classList.add("has-review"); // 알림이 아래 버튼을 가리지 않게 위로
   const done = $("#rvDone", d), timer = $("#rvTimer", d);
+  const people = [...new Set(items.map((it) => it.who))];
+  const drawStamps = () => {
+    $("#rvStamps", d).innerHTML = people.map((n) => {
+      const k = (Store.data.stamps || {})[n] || 0;
+      return `<span class="rv-st"><b>${esc(n)}</b> ${"⭐".repeat(Math.min(k, 3))}${"☆".repeat(Math.max(0, 3 - k))}${k > 3 ? ` +${k - 3}` : ""}</span>`;
+    }).join("") + `<small>다시 풀어서 맞히면 ⭐ · 3개 모이면 다음 판을 <b>능력 카드</b> 들고 출발!</small>`;
+  };
+  drawStamps();
+  // 1) 다시 볼 문제를 모두 다시 풀어 맞히면 2분 전이라도 넘어간다 (없으면 바로)
+  const allFixed = () => wrong.every(([it]) => it.fixed);
   const tick = () => {
+    if (allFixed()) {
+      done.disabled = false;
+      done.textContent = wrong.length ? "👍 다 풀었어요! 다음 게임" : "👍 모두 맞혔어요! 다음 게임";
+      timer.textContent = "✔";
+      timer.style.setProperty("--p", 0);
+      clearInterval(iv);
+      return;
+    }
     const left = Math.max(0, Store.data.reviewUntil - Date.now());
     const total = Math.ceil(left / 1000), m = Math.floor(total / 60), sec = total % 60;
     const mmss = `${m}:${String(sec).padStart(2, "0")}`;
     if (left > 0) {
       done.disabled = true;
-      done.textContent = `⏳ ${mmss} 뒤에 다음 게임`;
+      done.textContent = `⏳ ${mmss} 뒤에 · 또는 다시 풀기 ${wrong.filter(([it]) => it.fixed).length}/${wrong.length}`;
       timer.textContent = mmss;
       timer.style.setProperty("--p", (left / REVIEW_MS).toFixed(3));
     } else {
@@ -1691,17 +1722,31 @@ function openReview() {
   };
   const iv = setInterval(tick, 250);
   tick();
-  const close = () => { clearInterval(iv); Store.data.reviewUntil = 0; Store.save(); d.remove(); };
+  const close = () => { clearInterval(iv); Store.data.reviewUntil = 0; Store.save(); d.remove(); document.body.classList.remove("has-review"); };
   d.addEventListener("click", async (e) => {
     const sayB = e.target.closest("[data-say]");
     if (sayB) { sayEn(sayB.dataset.say); return; }
     const rt = e.target.closest("[data-retry]");
     if (rt) {
       const it = items[+rt.dataset.retry];
+      if (it.fixed) return;
       const ok = await practice(it);
       const card = rt.closest(".rv-card");
-      if (ok) { card.classList.add("fixed"); $(".rv-done", card).textContent = "✅ 다시 풀어서 맞혔어요!"; SFX.good(); }
-      else $(".rv-done", card).textContent = "💪 한 번 더 해 볼까요?";
+      if (ok) {
+        // 2) 복습 도장: 다시 맞히면 ⭐ (한 문제에 한 번)
+        it.fixed = true;
+        Store.data.stamps = Store.data.stamps || {};
+        Store.data.stamps[it.who] = (Store.data.stamps[it.who] || 0) + 1;
+        Store.save();
+        card.classList.add("fixed");
+        rt.remove();
+        $(".rv-done", card).textContent = "✅ 다시 풀어서 맞혔어요! ⭐";
+        SFX.good();
+        say(L.stampGet);
+        toast(`⭐ ${it.who} 도장 +1`, 1400);
+        drawStamps();
+        tick();
+      } else $(".rv-done", card).textContent = "💪 한 번 더 해 볼까요?";
       return;
     }
     if (e.target.closest("#rvDone") && !done.disabled) { SFX.pop(); close(); }
