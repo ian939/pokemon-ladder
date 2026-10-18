@@ -167,6 +167,24 @@ function rocketHTML() {
   return `<span class="rk"><img src="assets/ui/rocket-jessie.png" alt=""><img src="assets/ui/rocket-james.png" alt=""><img class="rk-cat" src="assets/ui/rocket-meowth.png" alt=""></span>`;
 }
 
+// ---------- 이름을 영어로 (차례 안내 "Jion's turn!" — 2026-10-18 사용자 요청: 한국어 "~의 차례예요" 가 어색) ----------
+function romanize(name) {
+  const I = ["g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p", "h"];
+  const V = ["a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we", "wi", "yu", "eu", "ui", "i"];
+  const F = ["", "k", "k", "k", "n", "n", "n", "t", "l", "k", "m", "l", "l", "l", "p", "l", "m", "p", "p", "t", "t", "ng", "t", "t", "k", "t", "p", "t"];
+  let out = "";
+  for (const ch of String(name)) {
+    const c = ch.charCodeAt(0) - 0xac00;
+    if (c < 0 || c > 11171) { out += ch; continue; }
+    out += I[Math.floor(c / 588)] + V[Math.floor((c % 588) / 28)] + F[c % 28];
+  }
+  return out.charAt(0).toUpperCase() + out.slice(1);
+}
+function enName(p) {
+  const n = typeof p === "string" ? p : p.name;
+  return (window.VoiceLines.EN_NAMES || {})[n] || romanize(n);
+}
+
 // ---------- 화면 바꾸기 ----------
 function show(html, cls) {
   closeLayers();
@@ -234,6 +252,7 @@ function renderTitle() {
     if (!b) return;
     SFX.pop();
     const a = b.dataset.act;
+    if ((a === "resume" || a === "new") && reviewPending()) return openReview();
     if (a === "resume") resumeGame();
     if (a === "new") renderSetup();
     if (a === "help") showHelp();
@@ -851,9 +870,9 @@ const IO = {
         Wheel.show(12, wheelBadge(P(e.who)), false);
         renderPanel();
         focusCell(P(e.who).pos);
-        setMsg(`${nm(e.who)}의 차례!`);
-        turnBanner(`${trainerHTML(P(e.who), "big")}<b>${esc(nm(e.who))}</b><span>차례!</span>`);
-        say(nm(e.who), L.turn); // 기다리지 않는다 (사용자 피드백: 차례 안내가 너무 길다)
+        setMsg(`${nm(e.who)}의 차례! (${enName(P(e.who))}'s turn!)`);
+        turnBanner(`${trainerHTML(P(e.who), "big")}<b>${esc(nm(e.who))}</b><span>${esc(enName(P(e.who)))}'s turn!</span>`);
+        sayEn(`${enName(P(e.who))}'s turn!`); // 영어로, 기다리지 않는다
         await sleep(250);
         break;
       case "skip":
@@ -965,8 +984,8 @@ const IO = {
         renderPanel();
         focusCell(s.rocket.pos);
         setMsg(`👿 ${L.rocketTurn}`);
-        turnBanner(`${rocketHTML()}<b>로켓단</b><span>차례다옹!</span>`, true);
-        say(L.rocketTurn);
+        turnBanner(`${rocketHTML()}<b>로켓단</b><span>Team Rocket's turn!</span>`, true);
+        sayEn("Team Rocket's turn!");
         await sleep(250);
         break;
       case "rocket-rest":
@@ -1341,6 +1360,9 @@ const Quiz = {
     } catch (e) { d.remove(); throw e; }
     if (res === "first" || res === "hint") { SFX.good(); await this.cheer(d, res); }
     d.remove();
+    // 판 끝 복습용으로 모아 둔다 (사람만)
+    s.qlog = s.qlog || [];
+    s.qlog.push({ who: name, trainer: p.trainer, res, q: JSON.parse(JSON.stringify(q)) });
     // 기록
     Learn.record(rec, q, res);
     const lvChange = Learn.adjust(p, q.subject, res);
@@ -1573,6 +1595,11 @@ async function finishGame(s) {
   Store.data.history = Store.data.history.slice(0, 30);
   s.players.forEach((p) => { const r = Store.data.learn[p.name]; if (r) r.games = (r.games || 0) + 1; });
   Store.data.game = null;
+  // 복습: 이번 판에서 사람이 푼 문제 → 2분 동안 보고 나서 다음 판 (2026-10-18 사용자 요청)
+  if ((s.qlog || []).length) {
+    Store.data.review = { at: Date.now(), items: s.qlog };
+    Store.data.reviewUntil = Date.now() + REVIEW_MS;
+  }
   Store.save();
   const medal = lost ? ["🏃", "🏃", "🏃", "🏃"] : ["🥇", "🥈", "🥉", "🎖️"];
   show(`
@@ -1599,15 +1626,110 @@ async function finishGame(s) {
     const b = e.target.closest("[data-a]");
     if (!b) return;
     SFX.pop();
+    if (reviewPending()) return openReview();
     if (b.dataset.a === "again") startGame(Store.data.setup || DEFAULT_SETUP);
     else renderTitle();
   };
+  if (reviewPending()) openReview();
+}
+
+// =====================================================================
+// 판 끝 복습 (한 페이지 · 2분 동안 보고 나서 다음 판)
+// =====================================================================
+// 시험 모드는 기본 0초(복습 창 없음), ?review=밀리초 로 따로 시험
+const REVIEW_MS = TEST ? +(QS.get("review") || 0) : 120000;
+const RES_TAG = { first: ["🌟", "바로 맞힘"], hint: ["💡", "힌트 보고 맞힘"], explained: ["📖", "풀이 보고 맞힘"], fail: ["😢", "못 풂"] };
+function reviewPending() { return !!(Store.data.review && Store.data.reviewUntil && Date.now() < Store.data.reviewUntil); }
+function reviewCard(it, k, wrong) {
+  const q = it.q, [ico, tag] = RES_TAG[it.res];
+  const ans = Array.isArray(q.answer) ? q.answer.join(" ") : q.answer;
+  const ansHTML = q.choiceType === "swatch" ? `<span class="sw" style="--sw:${EnQ.COLORS[ans] ? EnQ.COLORS[ans][0] : "#ccc"}"></span> ${esc(ans)}` : esc(ans) + (q.unit ? esc(q.unit) : "");
+  return `<article class="rv-card ${wrong ? "wrong" : "right"}" data-k="${k}">
+    <div class="rv-top">${trainerHTML({ trainer: it.trainer }, "sm")}<span class="rv-who">${esc(it.who)}</span>
+      <span class="rv-chip ${q.subject}">${q.subject === "math" ? "수학" : "영어"} · ${esc(q.name)}</span><span class="rv-res">${ico} ${tag}</span></div>
+    <p class="rv-q">${esc(q.prompt).replace(/\n/g, " ")}${q.expr ? ` <b>${esc(q.expr)}</b>` : ""}${q.picture ? ` <span class="rv-pic">${esc(q.picture)}</span>` : ""}</p>
+    <div class="rv-ans">정답: <b>${ansHTML}</b>${q.subject === "en" && (q.say || q.sayAnswer) ? ` <button class="btn small rv-say" data-say="${esc(q.sayAnswer ? ans : q.say)}" aria-label="듣기">🔊</button>` : ""}</div>
+    ${wrong ? `<ol class="rv-steps">${q.explain.map((t) => `<li>${esc(t)}</li>`).join("")}</ol>
+      <button class="btn rv-retry" data-retry="${k}">✏️ 다시 풀기</button><span class="rv-done"></span>` : ""}
+  </article>`;
+}
+function openReview() {
+  const R0 = Store.data.review;
+  if (!R0) return;
+  $$(".layer.review").forEach((x) => x.remove());
+  const items = R0.items;
+  const wrong = items.map((it, k) => [it, k]).filter(([it]) => it.res !== "first");
+  const right = items.map((it, k) => [it, k]).filter(([it]) => it.res === "first");
+  const cnt = (r) => items.filter((it) => it.res === r).length;
+  const d = layer("modal review", `<div class="win-box rv">
+    <header class="rv-head"><h2>📚 이번 판 복습</h2><span class="rv-n">푼 문제 ${items.length}개</span><span class="rv-timer" id="rvTimer"></span></header>
+    <div class="rv-sum">🌟 바로 ${cnt("first")} · 💡 힌트 ${cnt("hint")} · 📖 풀이 ${cnt("explained")} · 😢 못 풂 ${cnt("fail")}</div>
+    <div class="rv-body">
+      ${wrong.length ? `<h3>🔁 다시 보면 좋은 문제 <small>(${wrong.length}) — 풀이를 읽고 다시 풀어 봐요!</small></h3>${wrong.map(([it, k]) => reviewCard(it, k, true)).join("")}` : `<h3>🎉 모두 한 번에 맞혔어요!</h3>`}
+      ${right.length ? `<h3>✅ 맞힌 문제 <small>(${right.length})</small></h3><div class="rv-grid">${right.map(([it, k]) => reviewCard(it, k, false)).join("")}</div>` : ""}
+    </div>
+    <footer class="rv-foot"><button class="btn big primary" id="rvDone" disabled>⏳</button><button class="btn small ghost" id="rvSkip">🔒 어른이 넘기기</button></footer>
+  </div>`);
+  say(L.review);
+  const done = $("#rvDone", d), timer = $("#rvTimer", d);
+  const tick = () => {
+    const left = Math.max(0, Store.data.reviewUntil - Date.now());
+    const total = Math.ceil(left / 1000), m = Math.floor(total / 60), sec = total % 60;
+    const mmss = `${m}:${String(sec).padStart(2, "0")}`;
+    if (left > 0) {
+      done.disabled = true;
+      done.textContent = `⏳ ${mmss} 뒤에 다음 게임`;
+      timer.textContent = mmss;
+      timer.style.setProperty("--p", (left / REVIEW_MS).toFixed(3));
+    } else {
+      done.disabled = false;
+      done.textContent = "👍 다 봤어요!";
+      timer.textContent = "✔";
+      timer.style.setProperty("--p", 0);
+      clearInterval(iv);
+    }
+  };
+  const iv = setInterval(tick, 250);
+  tick();
+  const close = () => { clearInterval(iv); Store.data.reviewUntil = 0; Store.save(); d.remove(); };
+  d.addEventListener("click", async (e) => {
+    const sayB = e.target.closest("[data-say]");
+    if (sayB) { sayEn(sayB.dataset.say); return; }
+    const rt = e.target.closest("[data-retry]");
+    if (rt) {
+      const it = items[+rt.dataset.retry];
+      const ok = await practice(it);
+      const card = rt.closest(".rv-card");
+      if (ok) { card.classList.add("fixed"); $(".rv-done", card).textContent = "✅ 다시 풀어서 맞혔어요!"; SFX.good(); }
+      else $(".rv-done", card).textContent = "💪 한 번 더 해 볼까요?";
+      return;
+    }
+    if (e.target.closest("#rvDone") && !done.disabled) { SFX.pop(); close(); }
+    if (e.target.closest("#rvSkip")) parentGate(() => close());
+  });
+}
+/** 복습 화면에서 다시 풀기 (보상·기록 없음) */
+async function practice(it) {
+  const q = JSON.parse(JSON.stringify(it.q));
+  if (q.choices) q.choices = q.choices.slice().sort(() => Math.random() - 0.5);
+  if (q.tokens) q.tokens = q.tokens.slice().sort(() => Math.random() - 0.5);
+  const d = layer("quiz-layer practice", `<div class="quiz win-box" style="--pc:${TRAINER[it.trainer].color}">
+    <header class="qz-head">${trainerHTML({ trainer: it.trainer }, "sm")}<b>${esc(it.who)}</b><span class="qz-title">✏️ 다시 풀기</span><span class="qz-sub" id="qzSub"></span></header>
+    <div class="qz-body" id="qzBody"></div></div>`);
+  let ok = false;
+  try {
+    ok = await Quiz.ask(d, q, 1);
+    if (!ok) { await Quiz.hint(d, q); ok = await Quiz.ask(d, q, 2); }
+    if (!ok) await Quiz.reveal(d, q);
+  } catch (e) { /* 창을 닫음 */ }
+  d.remove();
+  return ok;
 }
 
 // =====================================================================
 // 부모 화면 (두 자리 곱셈 잠금)
 // =====================================================================
-function parentGate() {
+function parentGate(onOk) {
   const a = 12 + Math.floor(Math.random() * 28), b = 3 + Math.floor(Math.random() * 7);
   let typed = "";
   const d = layer("modal", `<div class="win-box gate"><h2>🔒 부모 화면</h2><p>어른만 열 수 있어요: <b>${a} × ${b} = ?</b></p>
@@ -1621,7 +1743,7 @@ function parentGate() {
     if (v === "close") return d.remove();
     if (v === "del") typed = typed.slice(0, -1);
     else if (v === "ok") {
-      if (+typed === a * b) { d.remove(); renderParent(); return; }
+      if (+typed === a * b) { d.remove(); (onOk || renderParent)(); return; }
       typed = ""; toast("다시 해 보세요");
     } else if (typed.length < 4) typed += v;
     $("#gateT", d).textContent = typed || "?";
@@ -1704,6 +1826,6 @@ window.addEventListener("online", () => checkUpdate(true));
 setInterval(() => checkUpdate(), 10 * 60000);
 
 // ---------- 시험용 손잡이 (?test) ----------
-if (TEST) window.__T = { G, Store, IO, Quiz, startGame, renderTitle, renderSetup, renderParent, R, revealCard, captureScene, kickScene, finishGame, explainVisualHTML };
+if (TEST) window.__T = { G, Store, IO, Quiz, startGame, renderTitle, renderSetup, renderParent, R, revealCard, captureScene, kickScene, finishGame, explainVisualHTML, openReview, enName };
 
 renderTitle();

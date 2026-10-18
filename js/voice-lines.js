@@ -65,12 +65,20 @@
     newGame: "새 모험을 시작해요!",
     updateNew: "새 버전이 나왔어요!",
     listen: "잘 들어 봐요.",
+    review: "이번 판에서 푼 문제를 같이 볼까요?",
   };
   // 이름 조각 (프로필에서 고를 수 있는 이름)
   // 돌림판 영어 (One~Twelve)
   const EN_WORDS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
   const NAMES = ["지온이", "엄마", "아빠", "할머니", "할아버지", "이모", "삼촌", "친구", "형", "누나", "언니", "동생"];
-  const API = { L, NAMES, EN_WORDS };
+  // 차례 안내 영어 이름 (2026-10-18 사용자 요청: "Jion's turn!")
+  const EN_NAMES = {
+    지온이: "Jion", 엄마: "Mom", 아빠: "Dad", 할머니: "Grandma", 할아버지: "Grandpa", 이모: "Auntie", 삼촌: "Uncle",
+    친구: "Friend", 형: "Brother", 누나: "Sister", 언니: "Sister", 동생: "Little one",
+    지우: "Ash", 웅: "Brock", 이슬: "Misty", 블루: "Blue", 레드: "Red",
+  };
+  const EN_LINES = Object.values(EN_NAMES).map((n) => `${n}'s turn!`).concat(["Team Rocket's turn!"]);
+  const API = { L, NAMES, EN_WORDS, EN_NAMES, EN_LINES };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else root.VoiceLines = API;
 })(typeof window !== "undefined" ? window : globalThis);

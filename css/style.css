@@ -608,3 +608,38 @@ img { image-rendering: pixelated; }
 .rp-res { font-size: 22px; min-height: 40px; }
 .rp-res b { font-size: 36px; color: #c0262d; }
 .rp-res span { font-size: 26px; color: #2f6fd6; font-weight: 700; }
+
+/* 차례 띠 영어 */
+.turn-banner span { font-size: 30px; color: #fff3d4; }
+/* 판 끝 복습 (한 페이지) */
+.layer.review > .rv { width: min(980px, 100%); max-height: 100%; display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden; }
+.rv-head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #fff1b8; border-bottom: 3px solid #3b2410; }
+.rv-head h2 { margin: 0; font-size: 26px; }
+.rv-n { flex: 1; font-size: 16px; color: #6b4a2a; }
+.rv-timer { --p: 1; width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px;
+  background: conic-gradient(#3fb35a calc(var(--p) * 360deg), #e8e0cc 0); border: 3px solid #3b2410; box-shadow: inset 0 0 0 7px #fffdf6; }
+.rv-sum { padding: 8px 18px; font-size: 18px; border-bottom: 2px dashed #d8c9a8; }
+.rv-body { overflow-y: auto; padding: 6px 18px 12px; -webkit-overflow-scrolling: touch; }
+.rv-body h3 { margin: 14px 0 8px; font-size: 21px; }
+.rv-body h3 small { font-size: 14px; font-weight: 400; color: #6b4a2a; }
+.rv-card { border: 3px solid #3b2410; border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; background: #fff; }
+.rv-card.wrong { border-left: 10px solid #e5484d; }
+.rv-card.right { border-left: 10px solid #3fb35a; margin: 0; }
+.rv-card.fixed { border-left-color: #3fb35a; background: #f0fff2; }
+.rv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.rv-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rv-who { font-weight: 700; }
+.rv-chip { font-size: 13px; padding: 2px 8px; border-radius: 8px; background: #e0ecff; }
+.rv-chip.en { background: #e6f7e9; }
+.rv-res { margin-left: auto; font-size: 14px; }
+.rv-q { margin: 6px 0; font-size: 18px; line-height: 1.4; word-break: keep-all; }
+.rv-pic { font-size: 28px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.rv-ans { font-size: 18px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rv-ans b { color: #2f6fd6; font-size: 20px; }
+.rv-ans .sw { display: inline-block; width: 22px; height: 22px; border-radius: 4px; background: var(--sw); border: 2px solid #333; vertical-align: middle; }
+.rv-steps { margin: 6px 0 8px; padding-left: 22px; font-size: 16px; line-height: 1.45; color: #3b2410; }
+.rv-retry { margin-right: 8px; }
+.rv-done { font-weight: 700; color: #2a8a3e; }
+.rv-foot { display: flex; align-items: center; gap: 12px; justify-content: center; padding: 10px 16px; border-top: 3px solid #3b2410; background: #fffdf6; }
+.rv-foot #rvDone { min-width: 300px; }
+.layer.quiz-layer.practice { z-index: 75; }
