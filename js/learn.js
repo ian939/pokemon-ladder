@@ -61,9 +61,10 @@
     const subj = opt.subject || (player.lastSubj === "math" ? "en" : "math");
     player.lastSubj = subj;
     const cur = subj === "math" ? player.math : player.en;
-    const lv = weightedLevel(subj, cur, 0, r);
-    // 약점 복습도 지금 레벨을 넘지 않게
-    const weak = weakConcepts(rec, subj).filter((c) => (subj === "math" ? M.LEVEL[c] <= cur : E.byLevel(Math.min(cur, lv)).includes(c)));
+    // opt.level: 레벨 고정 (로켓단 탈출 퀴즈 = LV.4, 2026-10-19 사용자 요청)
+    const lv = opt.level || weightedLevel(subj, cur, 0, r);
+    // 약점 복습도 지금 레벨을 넘지 않게 (레벨 고정이면 복습 안 섞음)
+    const weak = opt.level ? [] : weakConcepts(rec, subj).filter((c) => (subj === "math" ? M.LEVEL[c] <= cur : E.byLevel(Math.min(cur, lv)).includes(c)));
     let concept;
     if (weak.length && r() < 0.3) concept = weak[Math.floor(r() * weak.length)];
     else {

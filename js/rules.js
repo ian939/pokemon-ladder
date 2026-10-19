@@ -90,7 +90,7 @@
   const RULES = {
     abilitySlots: 2, heldSlots: 1,
     kick: 8,            // 포획 처리 뒤 로켓단 튕겨내기
-    capturePenalty: 5,  // 탈출 실패
+    capturePenalty: 10, // 잡혀서 탈출 실패 · 어른은 바로 (2026-10-19 사용자 요청: 5 → 10)
     exactFinish: true,  // 결승은 딱 맞아야 (넘치면 그 자리) — 2026-10-17 사용자 요청
     spin: 12,           // 사람 돌림판 1~12 (영어 One~Twelve) — 주사위 대신 (2026-10-17 사용자 요청)
     rocketSpin: 8,      // 로켓단 돌림판 1~8
@@ -362,8 +362,15 @@
         return "defended";
       }
     }
+    // 어른(컴퓨터 친구 포함)은 문제 없이 바로 10칸 뒤로 (2026-10-19 사용자 요청)
+    if (p.adult || p.cpu) {
+      await io.show({ type: "escape-fail", who: pi, adult: true });
+      await placePlayer(s, io, pi, p.pos - RULES.capturePenalty, { via: "penalty", chute: false, capture: false });
+      return "penalty";
+    }
+    // 아이: LV.4 어려운 문제 한 번 — 한 번에 맞혀야 탈출, 틀리면 10칸 뒤로
     const res = await askQuiz(s, io, pi, "escape");
-    if (res === "fail") {
+    if (res !== "first") {
       await io.show({ type: "escape-fail", who: pi });
       await placePlayer(s, io, pi, p.pos - RULES.capturePenalty, { via: "penalty", chute: false, capture: false });
       return "penalty";

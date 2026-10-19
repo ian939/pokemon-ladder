@@ -168,7 +168,20 @@ function game(mode, n) {
   {
     const s = game(100); s.rocket.pos = 20; s.players[0].pos = 23; s.players[1].pos = 80; s.force = [3];
     const io = makeIO({ quiz: ["fail"] }); await R.rocketTurn(s, io);
-    eq(s.players[0].pos, 18, "탈출 실패 → 5칸 후퇴 (18, 장치·이벤트 없음)");
+    eq(s.players[0].pos, 13, "탈출 실패 → 10칸 후퇴 (13 사다리 시작이지만 장치·이벤트 없음)");
+  }
+  {
+    const s = game(100); s.rocket.pos = 20; s.players[0].pos = 23; s.players[1].pos = 80; s.force = [3];
+    const io = makeIO({ quiz: ["hint"] }); await R.rocketTurn(s, io);
+    eq(s.players[0].pos, 13, "아이 탈출 퀴즈는 한 번에 맞혀야 — 한 번 틀리면(힌트) 10칸 뒤로");
+  }
+  {
+    const s = game(100); s.players[0].adult = true; s.rocket.pos = 20; s.players[0].pos = 23; s.players[1].pos = 80; s.force = [3];
+    const io = makeIO(); await R.rocketTurn(s, io);
+    ok(!io.log.some((e) => e.type === "quiz"), "어른은 잡혀도 문제 없음");
+    eq(s.players[0].pos, 13, "어른은 잡히면 바로 10칸 뒤로");
+    const s2 = game(100); s2.players[0].adult = true; s2.players[0].ability = ["P03"]; s2.rocket.pos = 20; s2.players[0].pos = 23; s2.players[1].pos = 80; s2.force = [3];
+    await R.rocketTurn(s2, makeIO()); eq(s2.players[0].pos, 23, "어른도 보호막 카드는 쓸 수 있음");
   }
   // 보호막 사용
   {

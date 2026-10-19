@@ -307,6 +307,17 @@ def main():
         pg.wait_for_function("() => window.__done")
         rp = pg.evaluate("() => window.__rp")
         check(rp and rp[0] == "+2" and "+2칸" in rp[1] and "Two" in rp[1], f"퀴즈 보상: +1·+2·+3 중 +2 에 멈추고 '+2칸! Two!' 표시 ({rp})")
+
+        pg.close()
+        # 로켓단 탈출 퀴즈 = LV.4 한 번 (2026-10-19 사용자 요청) — 새 페이지 (앞에서 Learn.pick 을 바꿔치기했음)
+        pg = page(1180, 820)
+        pg.goto(base + "/index.html?test&seed=5")
+        pg.click("text=새 모험")
+        pg.click("text=모험 출발")
+        pg.wait_for_selector("#rollBtn.ready")
+        lv4 = pg.evaluate("""() => { const out = []; const p = window.__T.G.s.players[0];
+          for (let i = 0; i < 40; i++) out.push(Learn.pick(p, Learn.blank(), null, Math.random, { level: 4 }).level); return out; }""")
+        check(set(lv4) == {4}, f"탈출 퀴즈 문제는 LV.4 만 ({sorted(set(lv4))})")
         pg.close()
 
         # ---------- 4. 이어하기 ----------

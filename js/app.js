@@ -1048,7 +1048,7 @@ const IO = {
       case "capture-safe": await captureLine(`🛡️ ${L.safe}`, L.safe); break;
       case "defend": await captureLine(`💧 ${R.CARDS[e.card].name}! ${L.defend}`, L.defend); break;
       case "escaped": await captureLine(`🎉 ${L.escaped}`, L.escaped); break;
-      case "escape-fail": await captureLine(`😢 ${L.escapeFail}`, L.escapeFail); break;
+      case "escape-fail": await captureLine(e.adult ? `🧑 ${L.adultCaught}` : `😢 ${L.escapeFail}`, e.adult ? L.adultCaught : L.escapeFail); break;
       case "win": break;
     }
     if (G.aborted) throw ABORT;
@@ -1347,15 +1347,19 @@ const Quiz = {
     const s = G.s, p = s.players[pi];
     const name = p.name;
     const rec = (Store.data.learn[name] = Store.data.learn[name] || Learn.blank());
-    const q = Learn.pick(p, rec, G.used, Math.random);
-    const title = { cell: "📘 퀴즈 칸", bonus: "⭐ 보너스 퀴즈", escape: "🚨 로켓단 탈출 퀴즈", challenge: "💡 퀴즈 도전 (+12칸)" }[ctx.reason] || "퀴즈";
+    const escape = ctx.reason === "escape";
+    // 로켓단 탈출 = LV.4 어려운 문제 한 번 (2026-10-19 사용자 요청)
+    const q = Learn.pick(p, rec, G.used, Math.random, escape ? { level: 4 } : {});
+    const title = { cell: "📘 퀴즈 칸", bonus: "⭐ 보너스 퀴즈", escape: "🚨 로켓단 탈출 · 어려운 문제! 한 번에 맞혀야 탈출", challenge: "💡 퀴즈 도전 (+12칸)" }[ctx.reason] || "퀴즈";
     const d = layer("quiz-layer", `<div class="quiz win-box" style="--pc:${TRAINER[p.trainer].color}">
       <header class="qz-head">${trainerHTML(p, "sm")}<b>${esc(name)}</b><span class="qz-title">${title}</span><span class="qz-sub" id="qzSub"></span></header>
       <div class="qz-body" id="qzBody"></div>
     </div>`);
     let res;
+    if (escape) say(L.hardQuiz);
     try {
       if (await this.ask(d, q, 1)) res = "first";
+      else if (escape) { SFX.bad(); await this.reveal(d, q); res = "fail"; }
       else {
         SFX.bad();
         await this.hint(d, q);
@@ -1376,7 +1380,7 @@ const Quiz = {
     s.qlog.push({ who: name, trainer: p.trainer, res, q: JSON.parse(JSON.stringify(q)) });
     // 기록
     Learn.record(rec, q, res);
-    const lvChange = Learn.adjust(p, q.subject, res);
+    const lvChange = escape ? null : Learn.adjust(p, q.subject, res); // 탈출 문제는 일부러 어려워서 레벨을 안 내림
     if (lvChange) {
       const subj = lvChange.subject === "math" ? "수학" : "영어";
       if (lvChange.to < lvChange.from) setMsg(`🌱 ${subj} LV.${lvChange.from} → LV.${lvChange.to} · 다음엔 조금 쉬운 문제로 연습해요!`);
